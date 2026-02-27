@@ -5,13 +5,14 @@
   <h2>{{ batch.name }}</h2>
 
   <div class="top-tools">
+
     <button class="tool-btn" type="button" onclick="toggleHighlight()">
       Highlight
     </button>
 
-    <!-- LAST FED (CLEAN + POPUP) -->
-    <div class="last-fed-row">
-      <div class="last-fed-label">Last fed:</div>
+    <!-- LAST FED SECTION -->
+    <div class="last-fed">
+      <div class="last-fed-label">Last fed section:</div>
 
       <div class="last-fed-preview" id="lastFedPreview"
            {% if last_fed_color %}
@@ -19,45 +20,23 @@
            {% endif %}
       ></div>
 
-      <button class="tool-btn" type="button" onclick="openLastFedPicker()">
-        Change
-      </button>
-    </div>
-  </div>
-
-  <!-- Last fed picker modal -->
-  <dialog class="day-dialog" id="lastFedDialog">
-    <div class="day-dialog-header">
-      <div>
-        <div class="day-dialog-date">Last fed</div>
-        <div class="day-dialog-status">Pick a color</div>
-      </div>
-      <button class="day-dialog-close" type="button"
-              onclick="document.getElementById('lastFedDialog').close()">✕</button>
-    </div>
-
-    <div class="day-dialog-body">
-      <div class="palette">
+      <div class="last-fed-palette">
         {% for c in color_options %}
           <button
             class="swatch {% if last_fed_color == c %}active{% endif %}"
             type="button"
             style="background: {{ c }};"
-            onclick="setLastFedColor('{{ c }}', {{ batch.id }}, true)">
+            onclick="setLastFedColor('{{ c }}', {{ batch.id }})">
           </button>
         {% endfor %}
+
         <button class="swatch clear" type="button"
-                onclick="setLastFedColor('', {{ batch.id }}, true)">✕</button>
+                onclick="setLastFedColor('', {{ batch.id }})">✕</button>
       </div>
     </div>
 
-    <div class="day-dialog-actions">
-      <button class="btn-outline" type="button"
-              onclick="document.getElementById('lastFedDialog').close()">Close</button>
-    </div>
-  </dialog>
+  </div>
 
-  <!-- Highlight palette (only shown when highlightMode ON) -->
   <div id="palette" class="palette hidden">
     {% for c in color_options %}
       <button class="swatch" type="button" style="background: {{ c }};" onclick="selectColor('{{ c }}')"></button>
@@ -84,7 +63,6 @@
         #{{ spider.number }}
       </button>
 
-      <!-- Spider popup (TODAY) -->
       {% set log = log_map.get(spider.id) %}
       <dialog class="day-dialog" id="dlg{{ spider.id }}">
         <div class="day-dialog-header">
@@ -166,6 +144,7 @@
               <div class="label">Notes</div>
               <textarea class="notes" name="notes">{{ (log.notes if log else '') }}</textarea>
             </div>
+
           </div>
 
           <input type="hidden" name="back" value="batch">
@@ -235,11 +214,7 @@
     return true;
   }
 
-  function openLastFedPicker(){
-    document.getElementById("lastFedDialog").showModal();
-  }
-
-  async function setLastFedColor(color, batchId, closeAfter){
+  async function setLastFedColor(color, batchId){
     const fd = new FormData();
     fd.append("batch_id", batchId);
     fd.append("last_fed_color", color);
@@ -249,20 +224,16 @@
       const preview = document.getElementById("lastFedPreview");
       preview.style.background = color ? color : "transparent";
 
-      // active outline in the picker
-      document.querySelectorAll("#lastFedDialog .swatch")
+      document.querySelectorAll(".last-fed-palette .swatch")
         .forEach(el => el.classList.remove("active"));
+
       if(color){
-        document.querySelectorAll("#lastFedDialog .swatch")
+        document.querySelectorAll(".last-fed-palette .swatch")
           .forEach(el => {
-            if((el.getAttribute("style") || "").includes(color)){
+            if(el.getAttribute("style") && el.getAttribute("style").includes(color)){
               el.classList.add("active");
             }
           });
-      }
-
-      if(closeAfter){
-        document.getElementById("lastFedDialog").close();
       }
     }
   }
