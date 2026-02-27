@@ -1,2 +1,13 @@
+# Database
 jumper.db
+*.db
+
+#python
+__pycache__/
 .venv/
+
+#Pycharm
+.idea/
+
+#OS
+.DS_store
