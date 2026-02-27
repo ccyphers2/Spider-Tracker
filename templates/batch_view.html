@@ -5,7 +5,10 @@
   <h2>{{ batch["name"] }}</h2>
 
   <div class="top-tools">
-    <button class="tool-btn" type="button" onclick="toggleHighlight()">Highlight</button>
+    <div class="tool-row">
+      <button class="tool-btn" type="button" onclick="toggleHighlight()">Highlight</button>
+      <button class="tool-btn" type="button" id="selectBtn" onclick="toggleSelectMode()">Select</button>
+    </div>
 
     <div class="last-fed">
       <div class="last-fed-label">Last fed section:</div>
@@ -23,6 +26,18 @@
         <button class="swatch clear" type="button" onclick="setLastFedColor('', {{ batch['id'] }})">✕</button>
       </div>
     </div>
+
+    <div id="selectBar" class="select-bar hidden">
+      <div class="select-left">
+        <div class="select-title">Selection mode</div>
+        <div class="select-sub"><span id="selCount">0</span> selected</div>
+      </div>
+      <div class="select-actions">
+        <button class="btn-outline" type="button" onclick="selectAll()">All</button>
+        <button class="btn" type="button" onclick="openBulk()">Done</button>
+      </div>
+    </div>
+
   </div>
 
   <div id="palette" class="palette hidden">
@@ -37,14 +52,16 @@
 </div>
 
 <div class="card pad-bottom-safe">
-  <div class="spider-grid">
+  <div class="spider-grid" id="grid">
     {% for spider in spiders %}
       {% set hc = highlight_map.get(spider["id"], '') %}
+      {% set sname = (spider["name"] or "") %}
       <button class="spider-chip"
               data-spider-id="{{ spider['id'] }}"
+              data-spider-number="{{ spider['number'] }}"
               onclick="chipClick(event, {{ spider['id'] }})"
               {% if hc %} style="background: {{ hc }}; border-color: {{ hc }}; color:#fff;" {% endif %}>
-        #{{ spider["number"] }}
+        #{{ spider["number"] }}{% if sname %}<span class="chip-name"> {{ sname }}</span>{% endif %}
       </button>
 
       {% set log = log_map.get(spider["id"]) %}
@@ -53,16 +70,22 @@
       <dialog class="day-dialog" id="dlg{{ spider['id'] }}">
         <div class="day-dialog-header">
           <div>
-            <div class="day-dialog-date">Spider #{{ spider["number"] }}</div>
+            <div class="day-dialog-date">
+              Spider #{{ spider["number"] }}{% if sname %} — {{ sname }}{% endif %}
+            </div>
             <div class="day-dialog-status">Day: {{ day }}</div>
           </div>
-          <button class="day-dialog-close" type="button"
-                  onclick="document.getElementById('dlg{{ spider['id'] }}').close()">✕</button>
+
+          <div class="dialog-nav">
+            <button class="nav-btn" type="button" onclick="navSpider(-1, {{ spider['id'] }})">‹</button>
+            <button class="nav-btn" type="button" onclick="navSpider(1, {{ spider['id'] }})">›</button>
+            <button class="day-dialog-close" type="button"
+                    onclick="document.getElementById('dlg{{ spider['id'] }}').close()">✕</button>
+          </div>
         </div>
 
-        <form method="post" action="/spiderlog/{{ spider['id'] }}/{{ day }}" onsubmit="return confirmApplyAll(this)">
+        <form method="post" action="/spiderlog/{{ spider['id'] }}/{{ day }}">
           <div class="day-dialog-body">
-            <input type="hidden" name="apply_all" value="0">
             <input type="hidden" name="booty" value="{{ booty }}" class="booty-input">
 
             <div class="field">
@@ -121,11 +144,9 @@
 
           </div>
 
-          <input type="hidden" name="back" value="batch">
-
           <div class="day-dialog-actions">
             <button class="btn-outline" type="button"
-                    onclick="document.getElementById('dlg{{ spider['id'] }}').close()">Close</button>
+                    onclick="document.getElementById('dlg{{ spider['id'] }}').close()">Save &amp; back out</button>
             <button class="btn" type="submit">Save</button>
           </div>
         </form>
@@ -135,15 +156,95 @@
   </div>
 </div>
 
+<!-- Bulk Apply Dialog -->
+<dialog class="day-dialog" id="bulkDlg">
+  <div class="day-dialog-header">
+    <div>
+      <div class="day-dialog-date">Apply to selected spiders</div>
+      <div class="day-dialog-status">Day: {{ day }}</div>
+    </div>
+    <button class="day-dialog-close" type="button" onclick="document.getElementById('bulkDlg').close()">✕</button>
+  </div>
+
+  <div class="day-dialog-body">
+    <div class="field">
+      <div class="label">Fed</div>
+      <div class="seg">
+        <label class="seg-item"><input type="radio" name="b_fed" value="yes"><span>Yes</span></label>
+        <label class="seg-item"><input type="radio" name="b_fed" value="no" checked><span>No</span></label>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="label">Ate</div>
+      <div class="seg">
+        <label class="seg-item"><input type="radio" name="b_ate" value="yes"><span>Yes</span></label>
+        <label class="seg-item"><input type="radio" name="b_ate" value="no" checked><span>No</span></label>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="label">Watered</div>
+      <div class="seg">
+        <label class="seg-item"><input type="radio" name="b_watered" value="yes"><span>Yes</span></label>
+        <label class="seg-item"><input type="radio" name="b_watered" value="no" checked><span>No</span></label>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="label">Molting</div>
+      <div class="seg">
+        <label class="seg-item"><input type="radio" name="b_molting" value="yes"><span>Yes</span></label>
+        <label class="seg-item"><input type="radio" name="b_molting" value="no" checked><span>No</span></label>
+      </div>
+    </div>
+
+    <div class="field">
+      <div class="label">Abdomen size</div>
+      <div class="booty-row" id="bulkBootyRow">
+        {% for n in [1,2,3,4,5] %}
+          <button type="button" class="booty-btn booty-{{n}} {% if n==3 %}selected{% endif %}"
+                  onclick="setBulkBooty({{n}})"></button>
+        {% endfor %}
+      </div>
+      <div class="hint">1 = skinny, 5 = very full</div>
+    </div>
+
+    <div class="field">
+      <div class="label">Number of molts</div>
+      <input class="input" id="b_molts" type="number" min="0" value="0">
+    </div>
+
+    <div class="field">
+      <div class="label">Notes</div>
+      <textarea class="notes" id="b_notes"></textarea>
+    </div>
+  </div>
+
+  <div class="day-dialog-actions">
+    <button class="btn-outline" type="button" onclick="document.getElementById('bulkDlg').close()">Back</button>
+    <button class="btn" type="button" onclick="applyBulk()">Apply</button>
+  </div>
+</dialog>
+
 <script>
+  // --- Highlight mode ---
   let highlightMode = false;
   let currentColor = "";
+
+  // --- Selection mode ---
+  let selectMode = false;
+  const selected = new Set();
+
+  // --- Spider ordering for next/prev nav ---
+  const spiderIds = Array.from(document.querySelectorAll(".spider-chip")).map(x => Number(x.dataset.spiderId));
 
   function toggleHighlight(){
     highlightMode = !highlightMode;
     document.getElementById("palette").classList.toggle("hidden", !highlightMode);
     document.getElementById("highlightStatus").textContent =
       "Highlight mode: " + (highlightMode ? "On (pick a color, then tap spiders)" : "Off");
+    if(highlightMode && selectMode) toggleSelectMode(); // don't mix modes
   }
 
   function selectColor(c){
@@ -156,8 +257,45 @@
       "Highlight mode: On (selected: " + (c ? "color" : "clear") + ")";
   }
 
+  function toggleSelectMode(){
+    selectMode = !selectMode;
+    if(selectMode && highlightMode){
+      highlightMode = false;
+      document.getElementById("palette").classList.add("hidden");
+      document.getElementById("highlightStatus").textContent = "Highlight mode: Off";
+    }
+
+    document.getElementById("selectBar").classList.toggle("hidden", !selectMode);
+    document.getElementById("selectBtn").textContent = selectMode ? "Exit" : "Select";
+
+    if(!selectMode){
+      selected.clear();
+      refreshSelectedUI();
+    }
+  }
+
+  function refreshSelectedUI(){
+    document.getElementById("selCount").textContent = String(selected.size);
+    document.querySelectorAll(".spider-chip").forEach(btn => {
+      const id = Number(btn.dataset.spiderId);
+      btn.classList.toggle("selected-chip", selected.has(id));
+    });
+  }
+
+  function selectAll(){
+    spiderIds.forEach(id => selected.add(id));
+    refreshSelectedUI();
+  }
+
   async function chipClick(evt, spiderId){
     evt.preventDefault();
+
+    if(selectMode){
+      if(selected.has(spiderId)) selected.delete(spiderId);
+      else selected.add(spiderId);
+      refreshSelectedUI();
+      return;
+    }
 
     if(highlightMode){
       const fd = new FormData();
@@ -183,12 +321,6 @@
     document.getElementById("dlg" + spiderId).showModal();
   }
 
-  function confirmApplyAll(formEl){
-    const yes = confirm("Apply these answers to ALL spiders for this day?");
-    formEl.querySelector('input[name="apply_all"]').value = yes ? "1" : "0";
-    return true;
-  }
-
   function toggleLastFed(){
     document.getElementById("lastFedPalette").classList.toggle("hidden");
   }
@@ -207,13 +339,77 @@
   }
 
   function selectBooty(btn, val){
-    const row = btn.closest(".day-dialog");
-    const input = row.querySelector(".booty-input");
-    input.value = String(val);
+    const dlg = btn.closest(".day-dialog");
+    const input = dlg.querySelector(".booty-input");
+    if(input) input.value = String(val);
 
     const all = btn.parentElement.querySelectorAll(".booty-btn");
     all.forEach(x => x.classList.remove("selected"));
     btn.classList.add("selected");
+  }
+
+  // --- swipe + next/prev ---
+  function navSpider(dir, currentId){
+    const idx = spiderIds.indexOf(currentId);
+    if(idx === -1) return;
+    const nextIdx = idx + dir;
+    if(nextIdx < 0 || nextIdx >= spiderIds.length) return;
+
+    document.getElementById("dlg" + currentId).close();
+    document.getElementById("dlg" + spiderIds[nextIdx]).showModal();
+  }
+
+  // --- Bulk apply ---
+  let bulkBooty = 3;
+
+  function openBulk(){
+    if(selected.size === 0){
+      alert("Select at least 1 spider.");
+      return;
+    }
+    document.getElementById("bulkDlg").showModal();
+  }
+
+  function setBulkBooty(n){
+    bulkBooty = n;
+    const row = document.getElementById("bulkBootyRow");
+    row.querySelectorAll(".booty-btn").forEach(b => b.classList.remove("selected"));
+    row.querySelector(".booty-" + n).classList.add("selected");
+  }
+
+  function _getBulkRadio(name){
+    const el = document.querySelector(`input[name="${name}"]:checked`);
+    return el ? el.value : "no";
+  }
+
+  async function applyBulk(){
+    const payload = {
+      spider_ids: Array.from(selected),
+      fed: _getBulkRadio("b_fed"),
+      ate: _getBulkRadio("b_ate"),
+      watered: _getBulkRadio("b_watered"),
+      molting: _getBulkRadio("b_molting"),
+      booty: bulkBooty,
+      molts_count: Number(document.getElementById("b_molts").value || 0),
+      notes: document.getElementById("b_notes").value || ""
+    };
+
+    const res = await fetch("/bulk_apply/{{ batch['id'] }}/{{ day }}", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if(!res.ok){
+      const t = await res.text();
+      alert("Bulk apply failed: " + t);
+      return;
+    }
+
+    // Exit selection mode + reload
+    document.getElementById("bulkDlg").close();
+    toggleSelectMode();
+    location.reload();
   }
 </script>
 

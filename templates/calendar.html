@@ -24,9 +24,17 @@
       {% for d in week %}
         {% set dstr = d.isoformat() %}
         {% set in_month = (d.month == month) %}
-        <a class="cal-day {% if not in_month %}muted{% endif %} {% if dstr == today.isoformat() %}today{% endif %}"
+        {% set has_data = (dstr in has_data_days) %}
+        <a class="cal-day
+                  {% if not in_month %}muted{% endif %}
+                  {% if dstr == today.isoformat() %}today{% endif %}
+                  {% if has_data %}has-data{% endif %}"
            href="{{ url_for('batch_view_day', batch_id=batch_id, day=dstr) }}">
           <div class="cal-day-num">{{ d.day }}</div>
+
+          {% if has_data %}
+            <div class="cal-marker" title="Has data">🕷</div>
+          {% endif %}
         </a>
       {% endfor %}
     {% endfor %}

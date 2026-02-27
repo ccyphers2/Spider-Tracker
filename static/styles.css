@@ -3,6 +3,7 @@
   --card:#ffffff;
   --accent:#4b5563;
   --text:#111827;
+  --blue:#3b82f6;
 }
 
 @media (prefers-color-scheme: dark){
@@ -11,6 +12,7 @@
     --card:#1c1f24;
     --accent:#9ca3af;
     --text:#f9fafb;
+    --blue:#60a5fa;
   }
 }
 
@@ -22,7 +24,7 @@ body{
 }
 
 .page{
-  padding-bottom: 88px; /* keeps content above bottom nav */
+  padding-bottom: 88px;
 }
 
 .card{
@@ -85,6 +87,12 @@ body{
   font-weight: 800;
 }
 
+.tool-row{
+  display:flex;
+  gap:10px;
+  flex-wrap: wrap;
+}
+
 .subtle{
   opacity:.75;
   font-size: 13px;
@@ -143,7 +151,35 @@ body{
   background: rgba(255,255,255,.06);
   color: var(--text);
   font-weight: 900;
+  position: relative;
 }
+
+.chip-name{
+  font-weight: 800;
+  opacity: .75;
+  font-size: 12px;
+  margin-left: 4px;
+}
+
+.selected-chip{
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.select-bar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+}
+.select-title{ font-weight: 950; }
+.select-sub{ opacity:.75; font-size: 12px; margin-top: 2px; }
+.select-left{ display:flex; flex-direction:column; }
+.select-actions{ display:flex; gap:10px; }
 
 .day-dialog{
   width: min(560px, 92vw);
@@ -166,6 +202,21 @@ body{
 }
 .day-dialog-date{ font-weight:900; font-size:16px; }
 .day-dialog-status{ opacity:.7; font-size:12px; margin-top:2px; }
+
+.dialog-nav{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.nav-btn{
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  border-radius: 12px;
+  font-weight: 900;
+  padding: 6px 10px;
+}
+
 .day-dialog-close{
   border:0;
   background: transparent;
@@ -263,10 +314,23 @@ body{
   color: var(--text);
   padding: 8px;
   text-decoration:none;
+  position: relative;
 }
 .cal-day-num{ font-weight:900; font-size:14px; }
 .cal-day.muted{ opacity:.35; }
 .cal-day.today{ outline: 2px solid var(--accent); }
+
+.cal-day.has-data{
+  outline: 2px solid rgba(59,130,246,.45);
+}
+
+.cal-marker{
+  position:absolute;
+  bottom: 6px;
+  right: 8px;
+  font-size: 14px;
+  opacity: .9;
+}
 
 .booty-row{
   display:flex;
@@ -283,7 +347,6 @@ body{
   position: relative;
 }
 
-/* Better “abdomen-ish” shape: tapered + little top notch */
 .booty-btn::before{
   content:"";
   position:absolute;
@@ -296,7 +359,6 @@ body{
   background: rgba(255,255,255,.10);
 }
 
-/* sizes 1-5 */
 .booty-1{ width: 22px; height: 18px; border-radius: 14px 14px 18px 18px; }
 .booty-2{ width: 26px; height: 19px; border-radius: 14px 14px 20px 20px; }
 .booty-3{ width: 30px; height: 20px; border-radius: 14px 14px 22px 22px; }

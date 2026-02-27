@@ -2,19 +2,23 @@ import os
 import sqlite3
 from datetime import date, datetime
 import calendar as pycal
+from threading import Lock
 
-from flask import Flask, render_template, request, redirect, url_for, session, abort
+from flask import Flask, render_template, request, redirect, url_for, session, abort, jsonify
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me")
 
-# On Render: set DB_PATH to /var/data/jumper.db if you attach a persistent disk
+# Render persistent disk path (you set this env var already)
 DB_PATH = os.environ.get("DB_PATH", "jumper.db")
 
 COLOR_OPTIONS = [
     "#ef4444", "#f97316", "#f59e0b", "#22c55e", "#06b6d4",
     "#3b82f6", "#8b5cf6", "#ec4899", "#111827", "#94a3b8",
 ]
+
+_db_init_lock = Lock()
+_db_inited = False
 
 
 def _ensure_db_dir():
@@ -25,9 +29,17 @@ def _ensure_db_dir():
 
 def connect():
     _ensure_db_dir()
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _table_exists(conn, table: str) -> bool:
+    r = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+        (table,)
+    ).fetchone()
+    return r is not None
 
 
 def _col_exists(conn, table: str, col: str) -> bool:
@@ -35,62 +47,79 @@ def _col_exists(conn, table: str, col: str) -> bool:
     return any(r["name"] == col for r in rows)
 
 
-def init_db():
-    with connect() as conn:
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS batches (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            last_fed_color TEXT DEFAULT ''
-        )
-        """)
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS spiders (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            batch_id INTEGER NOT NULL,
-            number INTEGER NOT NULL,
-            UNIQUE(batch_id, number)
-        )
-        """)
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS highlights (
-            spider_id INTEGER PRIMARY KEY,
-            color TEXT DEFAULT ''
-        )
-        """)
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS daylog (
-            day TEXT PRIMARY KEY,
-            watered INTEGER DEFAULT 0,
-            sprays INTEGER DEFAULT 0,
-            feeder TEXT DEFAULT '',
-            note TEXT DEFAULT ''
-        )
-        """)
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS spiderlog (
-            spider_id INTEGER NOT NULL,
-            day TEXT NOT NULL,
-            fed TEXT DEFAULT 'no',
-            ate TEXT DEFAULT 'no',
-            watered TEXT DEFAULT 'no',
-            molting TEXT DEFAULT 'no',
-            molts_count INTEGER DEFAULT 0,
-            notes TEXT DEFAULT '',
-            PRIMARY KEY (spider_id, day)
-        )
-        """)
+def init_db_once():
+    """
+    Initializes + migrates schema ONCE per process.
+    This prevents Render disk + concurrency issues caused by running init on every request.
+    """
+    global _db_inited
+    if _db_inited:
+        return
 
-        # Add abdomen/booty field safely if DB already exists
-        if not _col_exists(conn, "spiderlog", "booty"):
-            conn.execute("ALTER TABLE spiderlog ADD COLUMN booty INTEGER DEFAULT 3")
+    with _db_init_lock:
+        if _db_inited:
+            return
 
-        conn.commit()
+        with connect() as conn:
+            # Base tables
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS batches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                last_fed_color TEXT DEFAULT ''
+            )
+            """)
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS spiders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                batch_id INTEGER NOT NULL,
+                number INTEGER NOT NULL,
+                name TEXT DEFAULT '',
+                UNIQUE(batch_id, number)
+            )
+            """)
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS highlights (
+                spider_id INTEGER PRIMARY KEY,
+                color TEXT DEFAULT ''
+            )
+            """)
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS spiderlog (
+                spider_id INTEGER NOT NULL,
+                day TEXT NOT NULL,
+                fed TEXT DEFAULT 'no',
+                ate TEXT DEFAULT 'no',
+                watered TEXT DEFAULT 'no',
+                molting TEXT DEFAULT 'no',
+                molts_count INTEGER DEFAULT 0,
+                notes TEXT DEFAULT '',
+                booty INTEGER DEFAULT 3,
+                PRIMARY KEY (spider_id, day)
+            )
+            """)
+
+            # If an older DB exists, we upgrade it safely
+            # spiders.name
+            if _table_exists(conn, "spiders") and not _col_exists(conn, "spiders", "name"):
+                conn.execute("ALTER TABLE spiders ADD COLUMN name TEXT DEFAULT ''")
+
+            # spiderlog.booty (you already had this, but keep it safe)
+            if _table_exists(conn, "spiderlog") and not _col_exists(conn, "spiderlog", "booty"):
+                conn.execute("ALTER TABLE spiderlog ADD COLUMN booty INTEGER DEFAULT 3")
+
+            # Helpful indexes (safe)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_spiderlog_day ON spiderlog(day)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_spiders_batch ON spiders(batch_id)")
+
+            conn.commit()
+
+        _db_inited = True
 
 
 @app.before_request
-def _startup():
-    init_db()
+def _startup_guard():
+    init_db_once()
 
 
 def _get_last_batch_id():
@@ -107,7 +136,7 @@ def home():
     return redirect(url_for("batches"))
 
 
-# ✅ Today = spider grid for today
+# ✅ Today tab always shows today's spider grid for last batch
 @app.route("/today")
 def today_route():
     batch_id = _get_last_batch_id()
@@ -152,7 +181,7 @@ def create_batch():
         batch_id = cur.lastrowid
         for n in range(1, count + 1):
             conn.execute(
-                "INSERT OR IGNORE INTO spiders (batch_id, number) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO spiders (batch_id, number, name) VALUES (?, ?, '')",
                 (batch_id, n)
             )
         conn.commit()
@@ -186,7 +215,6 @@ def delete_batch(batch_id: int):
 
 @app.route("/batch/<int:batch_id>")
 def batch_view(batch_id: int):
-    # default to today
     return redirect(url_for("batch_view_day", batch_id=batch_id, day=date.today().isoformat()))
 
 
@@ -237,7 +265,7 @@ def batch_view_day(batch_id: int, day: str):
     )
 
 
-# ---------- SAVE SPIDER LOG (supports apply_all) ----------
+# ---------- SAVE SPIDER LOG (single spider) ----------
 
 @app.route("/spiderlog/<int:spider_id>/<day>", methods=["POST"])
 def save_spiderlog(spider_id: int, day: str):
@@ -263,21 +291,70 @@ def save_spiderlog(spider_id: int, day: str):
         booty = 3
     booty = max(1, min(5, booty))
 
-    apply_all = request.form.get("apply_all", "0") == "1"
-
     with connect() as conn:
         row = conn.execute("SELECT batch_id FROM spiders WHERE id=?", (spider_id,)).fetchone()
         if not row:
             abort(404)
         batch_id = row["batch_id"]
 
-        if apply_all:
-            spider_rows = conn.execute("SELECT id FROM spiders WHERE batch_id=?", (batch_id,)).fetchall()
-            spider_ids = [r["id"] for r in spider_rows]
-        else:
-            spider_ids = [spider_id]
+        conn.execute("""
+            INSERT INTO spiderlog (spider_id, day, fed, ate, watered, molting, molts_count, notes, booty)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(spider_id, day) DO UPDATE SET
+                fed=excluded.fed,
+                ate=excluded.ate,
+                watered=excluded.watered,
+                molting=excluded.molting,
+                molts_count=excluded.molts_count,
+                notes=excluded.notes,
+                booty=excluded.booty
+        """, (spider_id, day, fed, ate, watered, molting, molts_count, notes, booty))
 
-        for sid in spider_ids:
+        conn.commit()
+
+    return redirect(url_for("batch_view_day", batch_id=batch_id, day=day))
+
+
+# ---------- BULK APPLY (Selection Mode) ----------
+
+@app.route("/bulk_apply/<int:batch_id>/<day>", methods=["POST"])
+def bulk_apply(batch_id: int, day: str):
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        return ("bad day", 400)
+
+    data = request.get_json(silent=True) or {}
+    spider_ids = data.get("spider_ids") or []
+    if not isinstance(spider_ids, list) or not spider_ids:
+        return ("no spiders selected", 400)
+
+    fed = data.get("fed", "no")
+    ate = data.get("ate", "no")
+    watered = data.get("watered", "no")
+    molting = data.get("molting", "no")
+    notes = data.get("notes", "")
+    try:
+        molts_count = int(data.get("molts_count", 0))
+    except:
+        molts_count = 0
+    try:
+        booty = int(data.get("booty", 3))
+    except:
+        booty = 3
+    booty = max(1, min(5, booty))
+
+    # Safety: only allow spiders that belong to this batch
+    with connect() as conn:
+        valid = conn.execute(
+            f"SELECT id FROM spiders WHERE batch_id=? AND id IN ({','.join(['?']*len(spider_ids))})",
+            [batch_id] + spider_ids
+        ).fetchall()
+        valid_ids = [r["id"] for r in valid]
+        if not valid_ids:
+            return ("no valid spiders", 400)
+
+        for sid in valid_ids:
             conn.execute("""
                 INSERT INTO spiderlog (spider_id, day, fed, ate, watered, molting, molts_count, notes, booty)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -293,11 +370,7 @@ def save_spiderlog(spider_id: int, day: str):
 
         conn.commit()
 
-    back = request.form.get("back", "batch")
-    if back == "calendar":
-        return redirect(url_for("calendar_view", year=int(day[:4]), month=int(day[5:7])))
-
-    return redirect(url_for("batch_view_day", batch_id=batch_id, day=day))
+    return jsonify({"ok": True, "count": len(valid_ids)})
 
 
 # ---------- HIGHLIGHT + LAST FED ----------
@@ -342,7 +415,7 @@ def set_last_fed():
     return ("ok", 200)
 
 
-# ---------- CALENDAR (Month + Year visible; click day opens spider grid) ----------
+# ---------- CALENDAR (Month+Year + day markers) ----------
 
 @app.route("/calendar")
 @app.route("/calendar/<int:year>/<int:month>")
@@ -367,12 +440,19 @@ def calendar_view(year=None, month=None):
 
     batch_id = _get_last_batch_id()
 
-    # day_map is optional (kept for future use)
-    with connect() as conn:
+    # Mark days that have ANY spiderlog entries (for this batch)
+    has_data_days = set()
+    if batch_id and weeks:
         start = weeks[0][0].isoformat()
         end = weeks[-1][-1].isoformat()
-        day_rows = conn.execute("SELECT * FROM daylog WHERE day BETWEEN ? AND ?", (start, end)).fetchall()
-    day_map = {r["day"]: r for r in day_rows}
+        with connect() as conn:
+            rows = conn.execute("""
+                SELECT DISTINCT day
+                FROM spiderlog
+                WHERE day BETWEEN ? AND ?
+                  AND spider_id IN (SELECT id FROM spiders WHERE batch_id=?)
+            """, (start, end, batch_id)).fetchall()
+        has_data_days = {r["day"] for r in rows}
 
     return render_template(
         "calendar.html",
@@ -381,10 +461,10 @@ def calendar_view(year=None, month=None):
         month=month,
         month_name=month_name,
         weeks=weeks,
-        day_map=day_map,
         batch_id=batch_id,
         prev_y=prev_y, prev_m=prev_m,
-        next_y=next_y, next_m=next_m
+        next_y=next_y, next_m=next_m,
+        has_data_days=has_data_days
     )
 
 
