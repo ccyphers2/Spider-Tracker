@@ -7,22 +7,20 @@
   <form method="POST" action="{{ url_for('create_batch') }}">
     <input name="name" type="text" placeholder="Batch name" required>
     <input name="count" type="number" placeholder="Spider count" min="1" required>
-    <button type="submit">Create</button>
+    <button class="btn" type="submit">Create</button>
   </form>
 </div>
 
 {% if batches %}
   {% for batch in batches %}
     <div class="card">
-      <h3>{{ batch.name }}</h3>
-      <p>Spiders: {{ batch.spider_count }}</p>
+      <h3>{{ batch["name"] }}</h3>
+      <p>Spiders: {{ count_map.get(batch["id"], 0) }}</p>
 
-      <a href="{{ url_for('batch_view', batch_id=batch.id) }}">Open</a>
-      |
-      <a href="{{ url_for('delete_batch', batch_id=batch.id) }}"
-         onclick="return confirm('Delete this batch?')">
-        Delete
-      </a>
+      <a class="btn" href="{{ url_for('batch_view', batch_id=batch['id']) }}">Open</a>
+      <a class="btn-outline" style="margin-left:10px;"
+         href="{{ url_for('delete_batch', batch_id=batch['id']) }}"
+         onclick="return confirm('Delete this batch?')">Delete</a>
     </div>
   {% endfor %}
 {% else %}

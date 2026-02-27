@@ -1,20 +1,19 @@
 import os
 import sqlite3
-from datetime import date
+from datetime import date, datetime
 import calendar as pycal
 
-from flask import Flask, render_template, request, redirect, url_for, session, abort, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, abort
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me")
 
-# Render persistent disk later: set DB_PATH to /var/data/jumper.db
+# On Render: set DB_PATH to /var/data/jumper.db if you attach a persistent disk
 DB_PATH = os.environ.get("DB_PATH", "jumper.db")
 
-# Palette used by batch_view
 COLOR_OPTIONS = [
-    "#FF6B6B", "#FFA94D", "#FFD43B", "#69DB7C", "#38D9A9",
-    "#4DABF7", "#748FFC", "#B197FC", "#F783AC", "#ADB5BD"
+    "#ef4444", "#f97316", "#f59e0b", "#22c55e", "#06b6d4",
+    "#3b82f6", "#8b5cf6", "#ec4899", "#111827", "#94a3b8",
 ]
 
 
@@ -31,27 +30,20 @@ def connect():
     return conn
 
 
-def _column_exists(conn, table: str, col: str) -> bool:
+def _col_exists(conn, table: str, col: str) -> bool:
     rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
     return any(r["name"] == col for r in rows)
 
 
 def init_db():
     with connect() as conn:
-        # batches now includes spider_count + last_fed_color (your UI wants it)
         conn.execute("""
         CREATE TABLE IF NOT EXISTS batches (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL
+            name TEXT NOT NULL,
+            last_fed_color TEXT DEFAULT ''
         )
         """)
-
-        # Add missing columns safely (works even if DB already exists)
-        if not _column_exists(conn, "batches", "spider_count"):
-            conn.execute("ALTER TABLE batches ADD COLUMN spider_count INTEGER DEFAULT 0")
-        if not _column_exists(conn, "batches", "last_fed_color"):
-            conn.execute("ALTER TABLE batches ADD COLUMN last_fed_color TEXT DEFAULT ''")
-
         conn.execute("""
         CREATE TABLE IF NOT EXISTS spiders (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,8 +52,12 @@ def init_db():
             UNIQUE(batch_id, number)
         )
         """)
-
-        # day-level log (calendar day)
+        conn.execute("""
+        CREATE TABLE IF NOT EXISTS highlights (
+            spider_id INTEGER PRIMARY KEY,
+            color TEXT DEFAULT ''
+        )
+        """)
         conn.execute("""
         CREATE TABLE IF NOT EXISTS daylog (
             day TEXT PRIMARY KEY,
@@ -71,8 +67,6 @@ def init_db():
             note TEXT DEFAULT ''
         )
         """)
-
-        # spider daily log (per spider per date)
         conn.execute("""
         CREATE TABLE IF NOT EXISTS spiderlog (
             spider_id INTEGER NOT NULL,
@@ -87,13 +81,9 @@ def init_db():
         )
         """)
 
-        # NEW: highlight colors per spider (what your template expects)
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS spider_highlight (
-            spider_id INTEGER PRIMARY KEY,
-            color TEXT DEFAULT ''
-        )
-        """)
+        # Add abdomen/booty field safely if DB already exists
+        if not _col_exists(conn, "spiderlog", "booty"):
+            conn.execute("ALTER TABLE spiderlog ADD COLUMN booty INTEGER DEFAULT 3")
 
         conn.commit()
 
@@ -103,25 +93,46 @@ def _startup():
     init_db()
 
 
+def _get_last_batch_id():
+    lb = session.get("last_batch")
+    if lb:
+        return lb
+    with connect() as conn:
+        row = conn.execute("SELECT id FROM batches ORDER BY id DESC LIMIT 1").fetchone()
+    return row["id"] if row else None
+
+
 @app.route("/")
 def home():
     return redirect(url_for("batches"))
 
 
-# ---------- BATCHES LIST ----------
+# ✅ Today = spider grid for today
+@app.route("/today")
+def today_route():
+    batch_id = _get_last_batch_id()
+    if not batch_id:
+        return redirect(url_for("batches"))
+    return redirect(url_for("batch_view_day", batch_id=batch_id, day=date.today().isoformat()))
+
+
+# ---------- BATCHES ----------
 
 @app.route("/batches", methods=["GET"])
 def batches():
     with connect() as conn:
         rows = conn.execute("SELECT * FROM batches ORDER BY id DESC").fetchall()
-    return render_template("batches.html", batches=rows)
+        counts = conn.execute("""
+            SELECT batch_id, COUNT(*) AS c
+            FROM spiders
+            GROUP BY batch_id
+        """).fetchall()
+    count_map = {r["batch_id"]: r["c"] for r in counts}
+    return render_template("batches.html", batches=rows, count_map=count_map)
 
 
-@app.route("/create_batch", methods=["POST", "GET"])
+@app.route("/create_batch", methods=["POST"])
 def create_batch():
-    if request.method == "GET":
-        return redirect(url_for("batches"))
-
     name = (request.form.get("name") or "").strip()
     count_raw = (request.form.get("count") or "").strip()
 
@@ -134,15 +145,11 @@ def create_batch():
         count = 0
 
     if count < 1:
-        count = 1
+        return redirect(url_for("batches"))
 
     with connect() as conn:
-        cur = conn.execute(
-            "INSERT INTO batches (name, spider_count, last_fed_color) VALUES (?, ?, ?)",
-            (name, count, "")
-        )
+        cur = conn.execute("INSERT INTO batches (name, last_fed_color) VALUES (?, '')", (name,))
         batch_id = cur.lastrowid
-
         for n in range(1, count + 1):
             conn.execute(
                 "INSERT OR IGNORE INTO spiders (batch_id, number) VALUES (?, ?)",
@@ -154,7 +161,7 @@ def create_batch():
     return redirect(url_for("batch_view", batch_id=batch_id))
 
 
-@app.route("/delete_batch/<int:batch_id>", methods=["GET", "POST"])
+@app.route("/delete_batch/<int:batch_id>", methods=["GET"])
 def delete_batch(batch_id: int):
     with connect() as conn:
         spider_ids = conn.execute("SELECT id FROM spiders WHERE batch_id=?", (batch_id,)).fetchall()
@@ -163,7 +170,7 @@ def delete_batch(batch_id: int):
         if spider_ids:
             q = ",".join(["?"] * len(spider_ids))
             conn.execute(f"DELETE FROM spiderlog WHERE spider_id IN ({q})", spider_ids)
-            conn.execute(f"DELETE FROM spider_highlight WHERE spider_id IN ({q})", spider_ids)
+            conn.execute(f"DELETE FROM highlights WHERE spider_id IN ({q})", spider_ids)
 
         conn.execute("DELETE FROM spiders WHERE batch_id=?", (batch_id,))
         conn.execute("DELETE FROM batches WHERE id=?", (batch_id,))
@@ -179,7 +186,17 @@ def delete_batch(batch_id: int):
 
 @app.route("/batch/<int:batch_id>")
 def batch_view(batch_id: int):
-    today = date.today().isoformat()
+    # default to today
+    return redirect(url_for("batch_view_day", batch_id=batch_id, day=date.today().isoformat()))
+
+
+@app.route("/batch/<int:batch_id>/<day>")
+def batch_view_day(batch_id: int, day: str):
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        abort(404)
+
     session["last_batch"] = batch_id
 
     with connect() as conn:
@@ -193,16 +210,15 @@ def batch_view(batch_id: int):
         ).fetchall()
 
         logs = conn.execute("""
-            SELECT spider_id, fed, ate, watered, molting, molts_count, notes
+            SELECT spider_id, fed, ate, watered, molting, molts_count, notes, booty
             FROM spiderlog
             WHERE day=? AND spider_id IN (SELECT id FROM spiders WHERE batch_id=?)
-        """, (today, batch_id)).fetchall()
+        """, (day, batch_id)).fetchall()
 
-        # highlight colors
         hl_rows = conn.execute("""
-            SELECT sh.spider_id, sh.color
-            FROM spider_highlight sh
-            JOIN spiders s ON s.id = sh.spider_id
+            SELECT h.spider_id, h.color
+            FROM highlights h
+            JOIN spiders s ON s.id = h.spider_id
             WHERE s.batch_id=?
         """, (batch_id,)).fetchall()
 
@@ -213,7 +229,7 @@ def batch_view(batch_id: int):
         "batch_view.html",
         batch=batch,
         spiders=spiders,
-        day=today,
+        day=day,
         log_map=log_map,
         highlight_map=highlight_map,
         color_options=COLOR_OPTIONS,
@@ -221,25 +237,88 @@ def batch_view(batch_id: int):
     )
 
 
-# ---------- HIGHLIGHT + LAST FED ROUTES (your template calls these) ----------
+# ---------- SAVE SPIDER LOG (supports apply_all) ----------
+
+@app.route("/spiderlog/<int:spider_id>/<day>", methods=["POST"])
+def save_spiderlog(spider_id: int, day: str):
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        abort(404)
+
+    fed = request.form.get("fed", "no")
+    ate = request.form.get("ate", "no")
+    watered = request.form.get("watered", "no")
+    molting = request.form.get("molting", "no")
+    notes = request.form.get("notes", "")
+
+    try:
+        molts_count = int(request.form.get("molts_count", "0"))
+    except:
+        molts_count = 0
+
+    try:
+        booty = int(request.form.get("booty", "3"))
+    except:
+        booty = 3
+    booty = max(1, min(5, booty))
+
+    apply_all = request.form.get("apply_all", "0") == "1"
+
+    with connect() as conn:
+        row = conn.execute("SELECT batch_id FROM spiders WHERE id=?", (spider_id,)).fetchone()
+        if not row:
+            abort(404)
+        batch_id = row["batch_id"]
+
+        if apply_all:
+            spider_rows = conn.execute("SELECT id FROM spiders WHERE batch_id=?", (batch_id,)).fetchall()
+            spider_ids = [r["id"] for r in spider_rows]
+        else:
+            spider_ids = [spider_id]
+
+        for sid in spider_ids:
+            conn.execute("""
+                INSERT INTO spiderlog (spider_id, day, fed, ate, watered, molting, molts_count, notes, booty)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(spider_id, day) DO UPDATE SET
+                    fed=excluded.fed,
+                    ate=excluded.ate,
+                    watered=excluded.watered,
+                    molting=excluded.molting,
+                    molts_count=excluded.molts_count,
+                    notes=excluded.notes,
+                    booty=excluded.booty
+            """, (sid, day, fed, ate, watered, molting, molts_count, notes, booty))
+
+        conn.commit()
+
+    back = request.form.get("back", "batch")
+    if back == "calendar":
+        return redirect(url_for("calendar_view", year=int(day[:4]), month=int(day[5:7])))
+
+    return redirect(url_for("batch_view_day", batch_id=batch_id, day=day))
+
+
+# ---------- HIGHLIGHT + LAST FED ----------
 
 @app.route("/set_highlight", methods=["POST"])
 def set_highlight():
-    spider_id = request.form.get("spider_id", "").strip()
-    color = request.form.get("color", "").strip()
-
     try:
-        spider_id_int = int(spider_id)
+        spider_id = int(request.form.get("spider_id", "0"))
     except:
         return ("bad spider_id", 400)
 
+    color = (request.form.get("color") or "").strip()
+    if color and color not in COLOR_OPTIONS:
+        return ("bad color", 400)
+
     with connect() as conn:
-        # Upsert
         conn.execute("""
-            INSERT INTO spider_highlight (spider_id, color)
+            INSERT INTO highlights (spider_id, color)
             VALUES (?, ?)
             ON CONFLICT(spider_id) DO UPDATE SET color=excluded.color
-        """, (spider_id_int, color))
+        """, (spider_id, color))
         conn.commit()
 
     return ("ok", 200)
@@ -247,83 +326,27 @@ def set_highlight():
 
 @app.route("/set_last_fed", methods=["POST"])
 def set_last_fed():
-    batch_id = request.form.get("batch_id", "").strip()
-    color = request.form.get("last_fed_color", "").strip()
-
     try:
-        batch_id_int = int(batch_id)
+        batch_id = int(request.form.get("batch_id", "0"))
     except:
         return ("bad batch_id", 400)
 
+    color = (request.form.get("last_fed_color") or "").strip()
+    if color and color not in COLOR_OPTIONS:
+        return ("bad color", 400)
+
     with connect() as conn:
-        conn.execute("UPDATE batches SET last_fed_color=? WHERE id=?", (color, batch_id_int))
+        conn.execute("UPDATE batches SET last_fed_color=? WHERE id=?", (color, batch_id))
         conn.commit()
 
     return ("ok", 200)
 
 
-# ---------- SPIDER LOG (supports apply_all) ----------
-
-@app.route("/spiderlog/<int:spider_id>/<day>", methods=["POST"])
-def save_spiderlog(spider_id: int, day: str):
-    fed = request.form.get("fed", "no")
-    ate = request.form.get("ate", "no")
-    watered = request.form.get("watered", "no")
-    molting = request.form.get("molting", "no")
-    molts_count = request.form.get("molts_count", "0")
-    notes = request.form.get("notes", "")
-
-    apply_all = (request.form.get("apply_all", "0") == "1")
-
-    try:
-        molts_count = int(molts_count)
-    except:
-        molts_count = 0
-
-    def upsert_one(conn, sid: int):
-        conn.execute("""
-            INSERT INTO spiderlog (spider_id, day, fed, ate, watered, molting, molts_count, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(spider_id, day) DO UPDATE SET
-              fed=excluded.fed,
-              ate=excluded.ate,
-              watered=excluded.watered,
-              molting=excluded.molting,
-              molts_count=excluded.molts_count,
-              notes=excluded.notes
-        """, (sid, day, fed, ate, watered, molting, molts_count, notes))
-
-    with connect() as conn:
-        if apply_all:
-            # find the batch for this spider, then apply to every spider in that batch
-            row = conn.execute("""
-                SELECT batch_id FROM spiders WHERE id=?
-            """, (spider_id,)).fetchone()
-            if not row:
-                abort(404)
-            batch_id = row["batch_id"]
-
-            srows = conn.execute("SELECT id FROM spiders WHERE batch_id=?", (batch_id,)).fetchall()
-            for r in srows:
-                upsert_one(conn, r["id"])
-        else:
-            upsert_one(conn, spider_id)
-
-        conn.commit()
-
-    back = request.form.get("back", "")
-    if back == "calendar":
-        return redirect(url_for("calendar", year=int(day[:4]), month=int(day[5:7])))
-
-    # go back to last batch view
-    return redirect(url_for("batch_view", batch_id=session.get("last_batch", 1)))
-
-
-# ---------- CALENDAR (unchanged) ----------
+# ---------- CALENDAR (Month + Year visible; click day opens spider grid) ----------
 
 @app.route("/calendar")
 @app.route("/calendar/<int:year>/<int:month>")
-def calendar(year=None, month=None):
+def calendar_view(year=None, month=None):
     today = date.today()
     year = year or today.year
     month = month or today.month
@@ -331,80 +354,38 @@ def calendar(year=None, month=None):
     cal = pycal.Calendar(firstweekday=6)  # Sunday start
     weeks = cal.monthdatescalendar(year, month)
 
-    start = weeks[0][0].isoformat()
-    end = weeks[-1][-1].isoformat()
+    month_name = pycal.month_name[month]
 
+    prev_y, prev_m = year, month - 1
+    next_y, next_m = year, month + 1
+    if prev_m == 0:
+        prev_m = 12
+        prev_y -= 1
+    if next_m == 13:
+        next_m = 1
+        next_y += 1
+
+    batch_id = _get_last_batch_id()
+
+    # day_map is optional (kept for future use)
     with connect() as conn:
-        day_rows = conn.execute("""
-            SELECT * FROM daylog
-            WHERE day BETWEEN ? AND ?
-        """, (start, end)).fetchall()
-
-        batch_id = session.get("last_batch")
-        spiders = []
-        if batch_id:
-            spiders = conn.execute(
-                "SELECT * FROM spiders WHERE batch_id=? ORDER BY number ASC",
-                (batch_id,)
-            ).fetchall()
-
-        spider_logs = []
-        if batch_id and spiders:
-            spider_ids = [s["id"] for s in spiders]
-            q_marks = ",".join(["?"] * len(spider_ids))
-            spider_logs = conn.execute(f"""
-                SELECT * FROM spiderlog
-                WHERE day BETWEEN ? AND ?
-                AND spider_id IN ({q_marks})
-            """, (start, end, *spider_ids)).fetchall()
-
+        start = weeks[0][0].isoformat()
+        end = weeks[-1][-1].isoformat()
+        day_rows = conn.execute("SELECT * FROM daylog WHERE day BETWEEN ? AND ?", (start, end)).fetchall()
     day_map = {r["day"]: r for r in day_rows}
-    slog_map = {(r["spider_id"], r["day"]): r for r in spider_logs}
 
     return render_template(
         "calendar.html",
+        today=today,
         year=year,
         month=month,
+        month_name=month_name,
         weeks=weeks,
-        today=today,
         day_map=day_map,
-        spiders=spiders,
-        slog_map=slog_map
+        batch_id=batch_id,
+        prev_y=prev_y, prev_m=prev_m,
+        next_y=next_y, next_m=next_m
     )
-
-@app.route("/today")
-def today_page():
-    today = date.today().isoformat()
-    return redirect(url_for("day", day=today))
-
-
-@app.route("/day/<day>")
-def day(day: str):
-    with connect() as conn:
-        row = conn.execute("SELECT * FROM daylog WHERE day=?", (day,)).fetchone()
-    return render_template("day.html", day=row or {"day": day})
-
-
-@app.route("/save_day/<day>", methods=["POST"])
-def save_day(day: str):
-    watered = 1 if request.form.get("watered") else 0
-    sprays = request.form.get("sprays", 0)
-    feeder = request.form.get("feeder", "")
-    note = request.form.get("note", "")
-
-    with connect() as conn:
-        conn.execute("""
-            INSERT INTO daylog(day, watered, sprays, feeder, note)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(day) DO UPDATE SET
-              watered=excluded.watered,
-              sprays=excluded.sprays,
-              feeder=excluded.feeder,
-              note=excluded.note
-        """, (day, watered, sprays, feeder, note))
-        conn.commit()
-
-    return redirect(url_for("calendar", year=int(day[:4]), month=int(day[5:7])))
 
 
 if __name__ == "__main__":

@@ -2,170 +2,32 @@
 {% block content %}
 
 <div class="card">
-  <div class="cal-header">
-    <a class="cal-nav"
-       href="/calendar/{{ year if month>1 else (year-1) }}/{{ (month-1) if month>1 else 12 }}">←</a>
+  <div class="cal-head">
+    <a class="btn-outline" href="{{ url_for('calendar_view', year=prev_y, month=prev_m) }}">← Prev</a>
 
     <div class="cal-title">
       <div class="cal-month">{{ month_name }} {{ year }}</div>
-      <div class="cal-sub">Tap a day to view day log + spider logs</div>
+      <div class="cal-sub">Tap a day to open that day’s spider grid</div>
     </div>
 
-    <a class="cal-nav"
-       href="/calendar/{{ year if month<12 else (year+1) }}/{{ (month+1) if month<12 else 1 }}">→</a>
+    <a class="btn-outline" href="{{ url_for('calendar_view', year=next_y, month=next_m) }}">Next →</a>
   </div>
 </div>
 
-<div class="card cal-grid-card">
+<div class="card cal-grid-card pad-bottom-safe">
   <div class="cal-grid">
     <div class="cal-dow">Sun</div><div class="cal-dow">Mon</div><div class="cal-dow">Tue</div>
-    <div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div><div class="cal-dow">Sat</div>
+    <div class="cal-dow">Wed</div><div class="cal-dow">Thu</div><div class="cal-dow">Fri</div>
+    <div class="cal-dow">Sat</div>
 
     {% for week in weeks %}
       {% for d in week %}
-        {% set ds = d.isoformat() %}
-        {% set is_muted = (d.month != month) %}
-        {% set is_today = (d == today) %}
-
-        <button class="cal-day {% if is_muted %}muted{% endif %} {% if is_today %}today{% endif %}"
-                onclick="document.getElementById('daydlg{{ ds }}').showModal()">
+        {% set dstr = d.isoformat() %}
+        {% set in_month = (d.month == month) %}
+        <a class="cal-day {% if not in_month %}muted{% endif %} {% if dstr == today.isoformat() %}today{% endif %}"
+           href="{{ url_for('batch_view_day', batch_id=batch_id, day=dstr) }}">
           <div class="cal-day-num">{{ d.day }}</div>
-        </button>
-
-        <!-- Day popup -->
-        {% set dayrow = day_map.get(ds) %}
-        <dialog class="day-dialog" id="daydlg{{ ds }}">
-          <div class="day-dialog-header">
-            <div>
-              <div class="day-dialog-date">{{ ds }}</div>
-              <div class="day-dialog-status">{% if dayrow %}Day log saved{% else %}No day log{% endif %}</div>
-            </div>
-            <button class="day-dialog-close" onclick="document.getElementById('daydlg{{ ds }}').close()">✕</button>
-          </div>
-
-          <div class="day-dialog-body">
-            {% if dayrow %}
-              <div class="info-row"><b>Watered (day)</b><span>{{ "Yes" if dayrow.watered else "No" }}</span></div>
-              <div class="info-row"><b>Sprays</b><span>{{ dayrow.sprays }}</span></div>
-              <div class="info-row"><b>Feeder</b><span>{{ dayrow.feeder }}</span></div>
-              <div class="info-block">
-                <div class="info-label">Day Notes</div>
-                <div class="info-note">{{ dayrow.note }}</div>
-              </div>
-            {% else %}
-              <div class="no-data">No day log saved for this date.</div>
-            {% endif %}
-
-            <div class="info-block" style="margin-top:16px;">
-              <div class="info-label">Spiders (tap to view/edit THIS date)</div>
-              <div class="spider-grid" style="margin-top:10px;">
-                {% for s in spiders %}
-                  <button class="spider-chip"
-                          onclick="document.getElementById('sdlg{{ s.id }}_{{ ds }}').showModal()">
-                    #{{ s.number }}
-                  </button>
-
-                  {% set slog = slog_map.get((s.id, ds)) %}
-                  <dialog class="day-dialog" id="sdlg{{ s.id }}_{{ ds }}">
-                    <div class="day-dialog-header">
-                      <div>
-                        <div class="day-dialog-date">Spider #{{ s.number }}</div>
-                        <div class="day-dialog-status">Date: {{ ds }}</div>
-                      </div>
-                      <button class="day-dialog-close" onclick="document.getElementById('sdlg{{ s.id }}_{{ ds }}').close()">✕</button>
-                    </div>
-
-                    <form method="post" action="/spiderlog/{{ s.id }}/{{ ds }}">
-                      <div class="day-dialog-body">
-
-                        <div class="field">
-                          <div class="label">Fed</div>
-                          <div class="seg">
-                            <label class="seg-item">
-                              <input type="radio" name="fed" value="yes" {% if slog and slog.fed=='yes' %}checked{% endif %}>
-                              <span>Yes</span>
-                            </label>
-                            <label class="seg-item">
-                              <input type="radio" name="fed" value="no" {% if not slog or slog.fed!='yes' %}checked{% endif %}>
-                              <span>No</span>
-                            </label>
-                          </div>
-                        </div>
-
-                        <div class="field">
-                          <div class="label">Ate</div>
-                          <div class="seg">
-                            <label class="seg-item">
-                              <input type="radio" name="ate" value="yes" {% if slog and slog.ate=='yes' %}checked{% endif %}>
-                              <span>Yes</span>
-                            </label>
-                            <label class="seg-item">
-                              <input type="radio" name="ate" value="no" {% if not slog or slog.ate!='yes' %}checked{% endif %}>
-                              <span>No</span>
-                            </label>
-                          </div>
-                        </div>
-
-                        <div class="field">
-                          <div class="label">Watered</div>
-                          <div class="seg">
-                            <label class="seg-item">
-                              <input type="radio" name="watered" value="yes" {% if slog and slog.watered=='yes' %}checked{% endif %}>
-                              <span>Yes</span>
-                            </label>
-                            <label class="seg-item">
-                              <input type="radio" name="watered" value="no" {% if not slog or slog.watered!='yes' %}checked{% endif %}>
-                              <span>No</span>
-                            </label>
-                          </div>
-                        </div>
-
-                        <div class="field">
-                          <div class="label">Molting</div>
-                          <div class="seg">
-                            <label class="seg-item">
-                              <input type="radio" name="molting" value="yes" {% if slog and slog.molting=='yes' %}checked{% endif %}>
-                              <span>Yes</span>
-                            </label>
-                            <label class="seg-item">
-                              <input type="radio" name="molting" value="no" {% if not slog or slog.molting!='yes' %}checked{% endif %}>
-                              <span>No</span>
-                            </label>
-                          </div>
-                        </div>
-
-                        <div class="field">
-                          <div class="label">Number of molts</div>
-                          <input class="input" type="number" min="0" name="molts_count" value="{{ (slog.molts_count if slog else 0) }}">
-                        </div>
-
-                        <div class="field">
-                          <div class="label">Notes</div>
-                          <textarea class="notes" name="notes">{{ (slog.notes if slog else '') }}</textarea>
-                        </div>
-
-                      </div>
-
-                      <input type="hidden" name="back" value="calendar">
-
-                      <div class="day-dialog-actions">
-                        <button class="btn-outline" type="button"
-                                onclick="document.getElementById('sdlg{{ s.id }}_{{ ds }}').close()">Close</button>
-                        <button class="btn" type="submit">Save</button>
-                      </div>
-                    </form>
-                  </dialog>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-
-          <div class="day-dialog-actions">
-            <button class="btn-outline" type="button" onclick="document.getElementById('daydlg{{ ds }}').close()">Close</button>
-            <a class="btn" href="/day/{{ ds }}">Edit day log</a>
-          </div>
-        </dialog>
-
+        </a>
       {% endfor %}
     {% endfor %}
   </div>

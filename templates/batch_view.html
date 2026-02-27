@@ -2,39 +2,27 @@
 {% block content %}
 
 <div class="card">
-  <h2>{{ batch.name }}</h2>
+  <h2>{{ batch["name"] }}</h2>
 
   <div class="top-tools">
+    <button class="tool-btn" type="button" onclick="toggleHighlight()">Highlight</button>
 
-    <button class="tool-btn" type="button" onclick="toggleHighlight()">
-      Highlight
-    </button>
-
-    <!-- LAST FED SECTION -->
     <div class="last-fed">
       <div class="last-fed-label">Last fed section:</div>
 
       <div class="last-fed-preview" id="lastFedPreview"
-           {% if last_fed_color %}
-             style="background: {{ last_fed_color }};"
-           {% endif %}
-      ></div>
+           {% if last_fed_color %} style="background: {{ last_fed_color }};" {% endif %}></div>
 
-      <div class="last-fed-palette">
+      <button class="tool-btn" type="button" onclick="toggleLastFed()">Pick</button>
+
+      <div id="lastFedPalette" class="palette hidden" style="margin-top:10px;">
         {% for c in color_options %}
-          <button
-            class="swatch {% if last_fed_color == c %}active{% endif %}"
-            type="button"
-            style="background: {{ c }};"
-            onclick="setLastFedColor('{{ c }}', {{ batch.id }})">
-          </button>
+          <button class="swatch" type="button" style="background: {{ c }};"
+                  onclick="setLastFedColor('{{ c }}', {{ batch['id'] }})"></button>
         {% endfor %}
-
-        <button class="swatch clear" type="button"
-                onclick="setLastFedColor('', {{ batch.id }})">✕</button>
+        <button class="swatch clear" type="button" onclick="setLastFedColor('', {{ batch['id'] }})">✕</button>
       </div>
     </div>
-
   </div>
 
   <div id="palette" class="palette hidden">
@@ -45,78 +33,59 @@
   </div>
 
   <div class="subtle" id="highlightStatus">Highlight mode: Off</div>
-  <div class="subtle">Tap a spider to edit today ({{ day }})</div>
+  <div class="subtle">Tap a spider to edit ({{ day }})</div>
 </div>
 
-<div class="card">
+<div class="card pad-bottom-safe">
   <div class="spider-grid">
     {% for spider in spiders %}
-      {% set hc = highlight_map.get(spider.id, '') %}
-      <button
-        class="spider-chip"
-        data-spider-id="{{ spider.id }}"
-        onclick="chipClick(event, {{ spider.id }})"
-        {% if hc %}
-          style="background: {{ hc }}; border-color: {{ hc }}; color: #fff;"
-        {% endif %}
-      >
-        #{{ spider.number }}
+      {% set hc = highlight_map.get(spider["id"], '') %}
+      <button class="spider-chip"
+              data-spider-id="{{ spider['id'] }}"
+              onclick="chipClick(event, {{ spider['id'] }})"
+              {% if hc %} style="background: {{ hc }}; border-color: {{ hc }}; color:#fff;" {% endif %}>
+        #{{ spider["number"] }}
       </button>
 
-      {% set log = log_map.get(spider.id) %}
-      <dialog class="day-dialog" id="dlg{{ spider.id }}">
+      {% set log = log_map.get(spider["id"]) %}
+      {% set booty = (log["booty"] if log else 3) %}
+
+      <dialog class="day-dialog" id="dlg{{ spider['id'] }}">
         <div class="day-dialog-header">
           <div>
-            <div class="day-dialog-date">Spider #{{ spider.number }}</div>
-            <div class="day-dialog-status">Today: {{ day }}</div>
+            <div class="day-dialog-date">Spider #{{ spider["number"] }}</div>
+            <div class="day-dialog-status">Day: {{ day }}</div>
           </div>
           <button class="day-dialog-close" type="button"
-                  onclick="document.getElementById('dlg{{ spider.id }}').close()">✕</button>
+                  onclick="document.getElementById('dlg{{ spider['id'] }}').close()">✕</button>
         </div>
 
-        <form method="post" action="/spiderlog/{{ spider.id }}/{{ day }}" onsubmit="return confirmApplyAll(this)">
+        <form method="post" action="/spiderlog/{{ spider['id'] }}/{{ day }}" onsubmit="return confirmApplyAll(this)">
           <div class="day-dialog-body">
             <input type="hidden" name="apply_all" value="0">
+            <input type="hidden" name="booty" value="{{ booty }}" class="booty-input">
 
             <div class="field">
               <div class="label">Fed</div>
               <div class="seg">
-                <label class="seg-item">
-                  <input type="radio" name="fed" value="yes" {% if log and log.fed=='yes' %}checked{% endif %}>
-                  <span>Yes</span>
-                </label>
-                <label class="seg-item">
-                  <input type="radio" name="fed" value="no" {% if not log or log.fed!='yes' %}checked{% endif %}>
-                  <span>No</span>
-                </label>
+                <label class="seg-item"><input type="radio" name="fed" value="yes" {% if log and log["fed"]=="yes" %}checked{% endif %}><span>Yes</span></label>
+                <label class="seg-item"><input type="radio" name="fed" value="no"  {% if not log or log["fed"]!="yes" %}checked{% endif %}><span>No</span></label>
               </div>
             </div>
 
             <div class="field">
               <div class="label">Ate</div>
               <div class="seg">
-                <label class="seg-item">
-                  <input type="radio" name="ate" value="yes" {% if log and log.ate=='yes' %}checked{% endif %}>
-                  <span>Yes</span>
-                </label>
-                <label class="seg-item">
-                  <input type="radio" name="ate" value="no" {% if not log or log.ate!='yes' %}checked{% endif %}>
-                  <span>No</span>
-                </label>
+                <label class="seg-item"><input type="radio" name="ate" value="yes" {% if log and log["ate"]=="yes" %}checked{% endif %}><span>Yes</span></label>
+                <label class="seg-item"><input type="radio" name="ate" value="no"  {% if not log or log["ate"]!="yes" %}checked{% endif %}><span>No</span></label>
               </div>
             </div>
 
             <div class="field">
               <div class="label">Watered</div>
               <div class="seg">
-                <label class="seg-item">
-                  <input type="radio" name="watered" value="yes" {% if log and log.watered=='yes' %}checked{% endif %}>
-                  <span>Yes</span>
-                </label>
-                <label class="seg-item">
-                  <input type="radio" name="watered" value="no" {% if not log or log.watered!='yes' %}checked{% endif %}>
-                  <span>No</span>
-                </label>
+                <label class="seg-item"><input type="radio" name="watered" value="yes" {% if log and log["watered"]=="yes" %}checked{% endif %}><span>Yes</span></label>
+                <label class="seg-item"><input type="radio" name="watered" value="no"  {% if not log or log["watered"]!="yes" %}checked{% endif %}><span>No</span></label>
               </div>
               <div class="hint">Defaults to No unless you set Yes for this day.</div>
             </div>
@@ -124,25 +93,30 @@
             <div class="field">
               <div class="label">Molting</div>
               <div class="seg">
-                <label class="seg-item">
-                  <input type="radio" name="molting" value="yes" {% if log and log.molting=='yes' %}checked{% endif %}>
-                  <span>Yes</span>
-                </label>
-                <label class="seg-item">
-                  <input type="radio" name="molting" value="no" {% if not log or log.molting!='yes' %}checked{% endif %}>
-                  <span>No</span>
-                </label>
+                <label class="seg-item"><input type="radio" name="molting" value="yes" {% if log and log["molting"]=="yes" %}checked{% endif %}><span>Yes</span></label>
+                <label class="seg-item"><input type="radio" name="molting" value="no"  {% if not log or log["molting"]!="yes" %}checked{% endif %}><span>No</span></label>
               </div>
             </div>
 
             <div class="field">
+              <div class="label">Abdomen size</div>
+              <div class="booty-row" data-selected="{{ booty }}">
+                {% for n in [1,2,3,4,5] %}
+                  <button type="button" class="booty-btn booty-{{n}} {% if booty==n %}selected{% endif %}"
+                          onclick="selectBooty(this, {{n}})"></button>
+                {% endfor %}
+              </div>
+              <div class="hint">1 = skinny, 5 = very full</div>
+            </div>
+
+            <div class="field">
               <div class="label">Number of molts</div>
-              <input class="input" type="number" min="0" name="molts_count" value="{{ (log.molts_count if log else 0) }}">
+              <input class="input" type="number" min="0" name="molts_count" value="{{ (log['molts_count'] if log else 0) }}">
             </div>
 
             <div class="field">
               <div class="label">Notes</div>
-              <textarea class="notes" name="notes">{{ (log.notes if log else '') }}</textarea>
+              <textarea class="notes" name="notes">{{ (log['notes'] if log else '') }}</textarea>
             </div>
 
           </div>
@@ -151,11 +125,12 @@
 
           <div class="day-dialog-actions">
             <button class="btn-outline" type="button"
-                    onclick="document.getElementById('dlg{{ spider.id }}').close()">Close</button>
+                    onclick="document.getElementById('dlg{{ spider['id'] }}').close()">Close</button>
             <button class="btn" type="submit">Save</button>
           </div>
         </form>
       </dialog>
+
     {% endfor %}
   </div>
 </div>
@@ -168,17 +143,17 @@
     highlightMode = !highlightMode;
     document.getElementById("palette").classList.toggle("hidden", !highlightMode);
     document.getElementById("highlightStatus").textContent =
-      "Highlight mode: " + (highlightMode ? ("On (pick a color, then tap spiders)") : "Off");
+      "Highlight mode: " + (highlightMode ? "On (pick a color, then tap spiders)" : "Off");
   }
 
   function selectColor(c){
     currentColor = c;
-    const status = document.getElementById("highlightStatus");
     if(!highlightMode){
       highlightMode = true;
       document.getElementById("palette").classList.remove("hidden");
     }
-    status.textContent = "Highlight mode: On (selected: " + (c ? "color" : "clear") + ")";
+    document.getElementById("highlightStatus").textContent =
+      "Highlight mode: On (selected: " + (c ? "color" : "clear") + ")";
   }
 
   async function chipClick(evt, spiderId){
@@ -209,9 +184,13 @@
   }
 
   function confirmApplyAll(formEl){
-    const yes = confirm("Do you want to save for all spiders (for today)?");
+    const yes = confirm("Apply these answers to ALL spiders for this day?");
     formEl.querySelector('input[name="apply_all"]').value = yes ? "1" : "0";
     return true;
+  }
+
+  function toggleLastFed(){
+    document.getElementById("lastFedPalette").classList.toggle("hidden");
   }
 
   async function setLastFedColor(color, batchId){
@@ -223,19 +202,18 @@
     if(res.ok){
       const preview = document.getElementById("lastFedPreview");
       preview.style.background = color ? color : "transparent";
-
-      document.querySelectorAll(".last-fed-palette .swatch")
-        .forEach(el => el.classList.remove("active"));
-
-      if(color){
-        document.querySelectorAll(".last-fed-palette .swatch")
-          .forEach(el => {
-            if(el.getAttribute("style") && el.getAttribute("style").includes(color)){
-              el.classList.add("active");
-            }
-          });
-      }
+      document.getElementById("lastFedPalette").classList.add("hidden");
     }
+  }
+
+  function selectBooty(btn, val){
+    const row = btn.closest(".day-dialog");
+    const input = row.querySelector(".booty-input");
+    input.value = String(val);
+
+    const all = btn.parentElement.querySelectorAll(".booty-btn");
+    all.forEach(x => x.classList.remove("selected"));
+    btn.classList.add("selected");
   }
 </script>
 
