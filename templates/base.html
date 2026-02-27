@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+<head>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+{% block content %}{% endblock %}
+<div class="bottom-nav">
+<a href="/today">🕷 Today</a>
+<a href="/calendar">📅 Calendar</a>
+<a href="/batches">🗂 Batches</a>
+</div>
+</body>
+</html>

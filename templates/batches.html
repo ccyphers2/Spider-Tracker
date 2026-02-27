@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+<h2>Create Batch</h2>
+<form method="post" action="/create_batch">
+<input name="name" placeholder="Batch name">
+<input name="count" type="number" placeholder="Spider count">
+<button>Create</button>
+</form>
+</div>
+
+{% for batch in batches %}
+<div class="card">
+<h3>{{ batch.name }}</h3>
+<a href="/batch/{{ batch.id }}">Open</a>
+<a href="/delete_batch/{{ batch.id }}">Delete</a>
+</div>
+{% endfor %}
+{% endblock %}

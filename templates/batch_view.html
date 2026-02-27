@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <h2>{{ batch.name }}</h2>
+
+  <div class="top-tools">
+    <button class="tool-btn" type="button" onclick="toggleHighlight()">
+      Highlight
+    </button>
+
+    <!-- LAST FED (CLEAN + POPUP) -->
+    <div class="last-fed-row">
+      <div class="last-fed-label">Last fed:</div>
+
+      <div class="last-fed-preview" id="lastFedPreview"
+           {% if last_fed_color %}
+             style="background: {{ last_fed_color }};"
+           {% endif %}
+      ></div>
+
+      <button class="tool-btn" type="button" onclick="openLastFedPicker()">
+        Change
+      </button>
+    </div>
+  </div>
+
+  <!-- Last fed picker modal -->
+  <dialog class="day-dialog" id="lastFedDialog">
+    <div class="day-dialog-header">
+      <div>
+        <div class="day-dialog-date">Last fed</div>
+        <div class="day-dialog-status">Pick a color</div>
+      </div>
+      <button class="day-dialog-close" type="button"
+              onclick="document.getElementById('lastFedDialog').close()">✕</button>
+    </div>
+
+    <div class="day-dialog-body">
+      <div class="palette">
+        {% for c in color_options %}
+          <button
+            class="swatch {% if last_fed_color == c %}active{% endif %}"
+            type="button"
+            style="background: {{ c }};"
+            onclick="setLastFedColor('{{ c }}', {{ batch.id }}, true)">
+          </button>
+        {% endfor %}
+        <button class="swatch clear" type="button"
+                onclick="setLastFedColor('', {{ batch.id }}, true)">✕</button>
+      </div>
+    </div>
+
+    <div class="day-dialog-actions">
+      <button class="btn-outline" type="button"
+              onclick="document.getElementById('lastFedDialog').close()">Close</button>
+    </div>
+  </dialog>
+
+  <!-- Highlight palette (only shown when highlightMode ON) -->
+  <div id="palette" class="palette hidden">
+    {% for c in color_options %}
+      <button class="swatch" type="button" style="background: {{ c }};" onclick="selectColor('{{ c }}')"></button>
+    {% endfor %}
+    <button class="swatch clear" type="button" onclick="selectColor('')">✕</button>
+  </div>
+
+  <div class="subtle" id="highlightStatus">Highlight mode: Off</div>
+  <div class="subtle">Tap a spider to edit today ({{ day }})</div>
+</div>
+
+<div class="card">
+  <div class="spider-grid">
+    {% for spider in spiders %}
+      {% set hc = highlight_map.get(spider.id, '') %}
+      <button
+        class="spider-chip"
+        data-spider-id="{{ spider.id }}"
+        onclick="chipClick(event, {{ spider.id }})"
+        {% if hc %}
+          style="background: {{ hc }}; border-color: {{ hc }}; color: #fff;"
+        {% endif %}
+      >
+        #{{ spider.number }}
+      </button>
+
+      <!-- Spider popup (TODAY) -->
+      {% set log = log_map.get(spider.id) %}
+      <dialog class="day-dialog" id="dlg{{ spider.id }}">
+        <div class="day-dialog-header">
+          <div>
+            <div class="day-dialog-date">Spider #{{ spider.number }}</div>
+            <div class="day-dialog-status">Today: {{ day }}</div>
+          </div>
+          <button class="day-dialog-close" type="button"
+                  onclick="document.getElementById('dlg{{ spider.id }}').close()">✕</button>
+        </div>
+
+        <form method="post" action="/spiderlog/{{ spider.id }}/{{ day }}" onsubmit="return confirmApplyAll(this)">
+          <div class="day-dialog-body">
+            <input type="hidden" name="apply_all" value="0">
+
+            <div class="field">
+              <div class="label">Fed</div>
+              <div class="seg">
+                <label class="seg-item">
+                  <input type="radio" name="fed" value="yes" {% if log and log.fed=='yes' %}checked{% endif %}>
+                  <span>Yes</span>
+                </label>
+                <label class="seg-item">
+                  <input type="radio" name="fed" value="no" {% if not log or log.fed!='yes' %}checked{% endif %}>
+                  <span>No</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="label">Ate</div>
+              <div class="seg">
+                <label class="seg-item">
+                  <input type="radio" name="ate" value="yes" {% if log and log.ate=='yes' %}checked{% endif %}>
+                  <span>Yes</span>
+                </label>
+                <label class="seg-item">
+                  <input type="radio" name="ate" value="no" {% if not log or log.ate!='yes' %}checked{% endif %}>
+                  <span>No</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="label">Watered</div>
+              <div class="seg">
+                <label class="seg-item">
+                  <input type="radio" name="watered" value="yes" {% if log and log.watered=='yes' %}checked{% endif %}>
+                  <span>Yes</span>
+                </label>
+                <label class="seg-item">
+                  <input type="radio" name="watered" value="no" {% if not log or log.watered!='yes' %}checked{% endif %}>
+                  <span>No</span>
+                </label>
+              </div>
+              <div class="hint">Defaults to No unless you set Yes for this day.</div>
+            </div>
+
+            <div class="field">
+              <div class="label">Molting</div>
+              <div class="seg">
+                <label class="seg-item">
+                  <input type="radio" name="molting" value="yes" {% if log and log.molting=='yes' %}checked{% endif %}>
+                  <span>Yes</span>
+                </label>
+                <label class="seg-item">
+                  <input type="radio" name="molting" value="no" {% if not log or log.molting!='yes' %}checked{% endif %}>
+                  <span>No</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="field">
+              <div class="label">Number of molts</div>
+              <input class="input" type="number" min="0" name="molts_count" value="{{ (log.molts_count if log else 0) }}">
+            </div>
+
+            <div class="field">
+              <div class="label">Notes</div>
+              <textarea class="notes" name="notes">{{ (log.notes if log else '') }}</textarea>
+            </div>
+          </div>
+
+          <input type="hidden" name="back" value="batch">
+
+          <div class="day-dialog-actions">
+            <button class="btn-outline" type="button"
+                    onclick="document.getElementById('dlg{{ spider.id }}').close()">Close</button>
+            <button class="btn" type="submit">Save</button>
+          </div>
+        </form>
+      </dialog>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+  let highlightMode = false;
+  let currentColor = "";
+
+  function toggleHighlight(){
+    highlightMode = !highlightMode;
+    document.getElementById("palette").classList.toggle("hidden", !highlightMode);
+    document.getElementById("highlightStatus").textContent =
+      "Highlight mode: " + (highlightMode ? ("On (pick a color, then tap spiders)") : "Off");
+  }
+
+  function selectColor(c){
+    currentColor = c;
+    const status = document.getElementById("highlightStatus");
+    if(!highlightMode){
+      highlightMode = true;
+      document.getElementById("palette").classList.remove("hidden");
+    }
+    status.textContent = "Highlight mode: On (selected: " + (c ? "color" : "clear") + ")";
+  }
+
+  async function chipClick(evt, spiderId){
+    evt.preventDefault();
+
+    if(highlightMode){
+      const fd = new FormData();
+      fd.append("spider_id", spiderId);
+      fd.append("color", currentColor);
+
+      const res = await fetch("/set_highlight", { method: "POST", body: fd });
+      if(res.ok){
+        const btn = document.querySelector(`[data-spider-id="${spiderId}"]`);
+        if(currentColor){
+          btn.style.background = currentColor;
+          btn.style.borderColor = currentColor;
+          btn.style.color = "#fff";
+        }else{
+          btn.style.background = "";
+          btn.style.borderColor = "";
+          btn.style.color = "";
+        }
+      }
+      return;
+    }
+
+    document.getElementById("dlg" + spiderId).showModal();
+  }
+
+  function confirmApplyAll(formEl){
+    const yes = confirm("Do you want to save for all spiders (for today)?");
+    formEl.querySelector('input[name="apply_all"]').value = yes ? "1" : "0";
+    return true;
+  }
+
+  function openLastFedPicker(){
+    document.getElementById("lastFedDialog").showModal();
+  }
+
+  async function setLastFedColor(color, batchId, closeAfter){
+    const fd = new FormData();
+    fd.append("batch_id", batchId);
+    fd.append("last_fed_color", color);
+
+    const res = await fetch("/set_last_fed", { method:"POST", body: fd });
+    if(res.ok){
+      const preview = document.getElementById("lastFedPreview");
+      preview.style.background = color ? color : "transparent";
+
+      // active outline in the picker
+      document.querySelectorAll("#lastFedDialog .swatch")
+        .forEach(el => el.classList.remove("active"));
+      if(color){
+        document.querySelectorAll("#lastFedDialog .swatch")
+          .forEach(el => {
+            if((el.getAttribute("style") || "").includes(color)){
+              el.classList.add("active");
+            }
+          });
+      }
+
+      if(closeAfter){
+        document.getElementById("lastFedDialog").close();
+      }
+    }
+  }
+</script>
+
+{% endblock %}
