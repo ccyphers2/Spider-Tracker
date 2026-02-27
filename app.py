@@ -372,6 +372,11 @@ def calendar(year=None, month=None):
         slog_map=slog_map
     )
 
+@app.route("/today")
+def today_page():
+    today = date.today().isoformat()
+    return redirect(url_for("day", day=today))
+
 
 @app.route("/day/<day>")
 def day(day: str):
