@@ -3,12 +3,12 @@ import sqlite3
 from datetime import date
 import calendar as pycal
 
-from flask import Flask, render_template, request, redirect, url_for, session
+from flask import Flask, render_template, request, redirect, url_for, session, abort
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "change-me")  # set on Render later
+app.secret_key = os.environ.get("SECRET_KEY", "change-me")
 
-# Allow Render to store DB on a persistent disk (recommended)
+# For Render persistent disk later, set DB_PATH to something like /var/data/jumper.db
 DB_PATH = os.environ.get("DB_PATH", "jumper.db")
 
 
@@ -41,6 +41,8 @@ def init_db():
             UNIQUE(batch_id, number)
         )
         """)
+
+        # day-level log (calendar day)
         conn.execute("""
         CREATE TABLE IF NOT EXISTS daylog (
             day TEXT PRIMARY KEY,
@@ -50,6 +52,8 @@ def init_db():
             note TEXT DEFAULT ''
         )
         """)
+
+        # spider daily log (per spider per date)
         conn.execute("""
         CREATE TABLE IF NOT EXISTS spiderlog (
             spider_id INTEGER NOT NULL,
@@ -66,6 +70,8 @@ def init_db():
         conn.commit()
 
 
+# Flask 3 removed before_first_request, so we do a safe init on each request.
+# (CREATE TABLE IF NOT EXISTS is fast + harmless.)
 @app.before_request
 def _startup():
     init_db()
@@ -76,47 +82,95 @@ def home():
     return redirect(url_for("batches"))
 
 
+# ---------- BATCHES ----------
+
 @app.route("/batches", methods=["GET"])
 def batches():
     with connect() as conn:
         rows = conn.execute("SELECT * FROM batches ORDER BY id DESC").fetchall()
-    return render_template("batches.html", batches=rows)
+
+        # optional: show spider counts in the batches list page if your template wants it
+        counts = conn.execute("""
+            SELECT batch_id, COUNT(*) AS c
+            FROM spiders
+            GROUP BY batch_id
+        """).fetchall()
+    count_map = {r["batch_id"]: r["c"] for r in counts}
+    return render_template("batches.html", batches=rows, count_map=count_map)
 
 
-# --- CREATE BATCH: add multiple aliases so your template can't "miss" the route ---
-@app.route("/create_batch", methods=["POST"])
-@app.route("/add_batch", methods=["POST"])
-@app.route("/batches/create", methods=["POST"])
+# Matches your batches.html form action="/create_batch"
+# IMPORTANT: allow BOTH GET and POST so visiting /create_batch won't 404.
+@app.route("/create_batch", methods=["GET", "POST"])
 def create_batch():
-    name = (request.form.get("name") or request.form.get("batch_name") or "").strip()
-    if not name:
-        # If user submits blank, just go back without crashing
+    if request.method == "GET":
+        # If a link/button navigates here, just send user back
         return redirect(url_for("batches"))
 
-    with connect() as conn:
-        cur = conn.execute("INSERT INTO batches (name) VALUES (?)", (name,))
-        conn.commit()
-        batch_id = cur.lastrowid
+    name = (request.form.get("name") or "").strip()
+    count_raw = (request.form.get("count") or "").strip()
 
-    # optional: create spiders 1..N if form includes count
-    count_raw = request.form.get("count") or request.form.get("spider_count") or ""
+    if not name:
+        return redirect(url_for("batches"))
+
     try:
-        count = int(count_raw) if str(count_raw).strip() else 0
+        count = int(count_raw) if count_raw else 0
     except:
         count = 0
 
-    if count > 0:
-        with connect() as conn:
+    with connect() as conn:
+        cur = conn.execute("INSERT INTO batches (name) VALUES (?)", (name,))
+        batch_id = cur.lastrowid
+
+        # Create spiders 1..count if count provided
+        if count > 0:
             for n in range(1, count + 1):
                 conn.execute(
                     "INSERT OR IGNORE INTO spiders (batch_id, number) VALUES (?, ?)",
                     (batch_id, n)
                 )
-            conn.commit()
+        conn.commit()
 
     session["last_batch"] = batch_id
     return redirect(url_for("batch_view", batch_id=batch_id))
 
+
+# Optional aliases (won’t hurt)
+@app.route("/add_batch", methods=["POST"])
+@app.route("/batches/create", methods=["POST"])
+def create_batch_aliases():
+    return create_batch()
+
+
+@app.route("/delete_batch/<int:batch_id>", methods=["POST", "GET"])
+def delete_batch(batch_id: int):
+    # allow GET so templates can link it; still safe because you confirm on the UI
+    with connect() as conn:
+        # get spider ids for cleanup
+        spider_ids = conn.execute(
+            "SELECT id FROM spiders WHERE batch_id=?",
+            (batch_id,)
+        ).fetchall()
+        spider_ids = [r["id"] for r in spider_ids]
+
+        # delete spider logs
+        if spider_ids:
+            q_marks = ",".join(["?"] * len(spider_ids))
+            conn.execute(f"DELETE FROM spiderlog WHERE spider_id IN ({q_marks})", spider_ids)
+
+        # delete spiders + batch
+        conn.execute("DELETE FROM spiders WHERE batch_id=?", (batch_id,))
+        conn.execute("DELETE FROM batches WHERE id=?", (batch_id,))
+        conn.commit()
+
+    # reset last_batch if needed
+    if session.get("last_batch") == batch_id:
+        session.pop("last_batch", None)
+
+    return redirect(url_for("batches"))
+
+
+# ---------- BATCH VIEW ----------
 
 @app.route("/batch/<int:batch_id>")
 def batch_view(batch_id: int):
@@ -125,6 +179,9 @@ def batch_view(batch_id: int):
 
     with connect() as conn:
         batch = conn.execute("SELECT * FROM batches WHERE id=?", (batch_id,)).fetchone()
+        if not batch:
+            abort(404)
+
         spiders = conn.execute(
             "SELECT * FROM spiders WHERE batch_id=? ORDER BY number ASC",
             (batch_id,)
@@ -139,6 +196,8 @@ def batch_view(batch_id: int):
     log_map = {r["spider_id"]: r for r in logs}
     return render_template("batch_view.html", batch=batch, spiders=spiders, day=today, log_map=log_map)
 
+
+# ---------- SPIDER LOG ----------
 
 @app.route("/spiderlog/<int:spider_id>/<day>", methods=["POST"])
 def save_spiderlog(spider_id: int, day: str):
@@ -171,8 +230,11 @@ def save_spiderlog(spider_id: int, day: str):
     back = request.form.get("back", "")
     if back == "calendar":
         return redirect(url_for("calendar", year=int(day[:4]), month=int(day[5:7])))
+
     return redirect(url_for("batch_view", batch_id=session.get("last_batch", 1)))
 
+
+# ---------- CALENDAR ----------
 
 @app.route("/calendar")
 @app.route("/calendar/<int:year>/<int:month>")
@@ -255,5 +317,8 @@ def save_day(day: str):
     return redirect(url_for("calendar", year=int(day[:4]), month=int(day[5:7])))
 
 
+# ---------- RUN ----------
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port, debug=True)
