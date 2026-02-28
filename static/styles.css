@@ -4,6 +4,11 @@
   --accent:#4b5563;
   --text:#111827;
   --blue:#3b82f6;
+
+  /* NEW: tile background in light mode */
+  --tile:#ffffff;
+  --tileBorder: rgba(17,24,39,.10);
+  --tileBgSoft: rgba(17,24,39,.03);
 }
 
 @media (prefers-color-scheme: dark){
@@ -13,6 +18,11 @@
     --accent:#9ca3af;
     --text:#f9fafb;
     --blue:#60a5fa;
+
+    /* tile look in dark mode (keep your current vibe) */
+    --tile: rgba(255,255,255,.06);
+    --tileBorder: rgba(255,255,255,.10);
+    --tileBgSoft: rgba(255,255,255,.06);
   }
 }
 
@@ -161,6 +171,11 @@ body{
   margin-left: 4px;
 }
 
+/* NEW: when user toggles names off */
+.hide-names .chip-name{
+  display:none !important;
+}
+
 .selected-chip{
   outline: 3px solid var(--blue);
   outline-offset: 2px;
@@ -257,6 +272,22 @@ body{
   resize: vertical;
 }
 
+/* NEW: name editor area */
+.name-edit{
+  padding: 12px 16px 0 16px;
+}
+.name-row{
+  display:flex;
+  gap:10px;
+  align-items:center;
+}
+.name-input{
+  flex:1;
+}
+.name-save{
+  white-space:nowrap;
+}
+
 .seg{
   display:flex;
   gap:10px;
@@ -306,16 +337,22 @@ body{
   opacity:.65;
   padding: 6px 0;
 }
+
 .cal-day{
-  border: 1px solid rgba(255,255,255,.10);
+  border: 1px solid var(--tileBorder);
   border-radius: 14px;
   min-height: 54px;
-  background: rgba(255,255,255,.06);
+  background: var(--tile);
   color: var(--text);
   padding: 8px;
   text-decoration:none;
   position: relative;
 }
+
+.cal-day:hover{
+  background: var(--tileBgSoft);
+}
+
 .cal-day-num{ font-weight:900; font-size:14px; }
 .cal-day.muted{ opacity:.35; }
 .cal-day.today{ outline: 2px solid var(--accent); }

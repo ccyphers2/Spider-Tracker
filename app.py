@@ -9,7 +9,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, a
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me")
 
-# Render persistent disk path (you set this env var already)
+# Render persistent disk path
 DB_PATH = os.environ.get("DB_PATH", "jumper.db")
 
 COLOR_OPTIONS = [
@@ -48,10 +48,7 @@ def _col_exists(conn, table: str, col: str) -> bool:
 
 
 def init_db_once():
-    """
-    Initializes + migrates schema ONCE per process.
-    This prevents Render disk + concurrency issues caused by running init on every request.
-    """
+    """Init + migrate schema ONCE per process."""
     global _db_inited
     if _db_inited:
         return
@@ -61,7 +58,6 @@ def init_db_once():
             return
 
         with connect() as conn:
-            # Base tables
             conn.execute("""
             CREATE TABLE IF NOT EXISTS batches (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,6 +65,7 @@ def init_db_once():
                 last_fed_color TEXT DEFAULT ''
             )
             """)
+
             conn.execute("""
             CREATE TABLE IF NOT EXISTS spiders (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,12 +75,14 @@ def init_db_once():
                 UNIQUE(batch_id, number)
             )
             """)
+
             conn.execute("""
             CREATE TABLE IF NOT EXISTS highlights (
                 spider_id INTEGER PRIMARY KEY,
                 color TEXT DEFAULT ''
             )
             """)
+
             conn.execute("""
             CREATE TABLE IF NOT EXISTS spiderlog (
                 spider_id INTEGER NOT NULL,
@@ -99,16 +98,13 @@ def init_db_once():
             )
             """)
 
-            # If an older DB exists, we upgrade it safely
-            # spiders.name
+            # Migrations for older DBs (safe)
             if _table_exists(conn, "spiders") and not _col_exists(conn, "spiders", "name"):
                 conn.execute("ALTER TABLE spiders ADD COLUMN name TEXT DEFAULT ''")
 
-            # spiderlog.booty (you already had this, but keep it safe)
             if _table_exists(conn, "spiderlog") and not _col_exists(conn, "spiderlog", "booty"):
                 conn.execute("ALTER TABLE spiderlog ADD COLUMN booty INTEGER DEFAULT 3")
 
-            # Helpful indexes (safe)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_spiderlog_day ON spiderlog(day)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_spiders_batch ON spiders(batch_id)")
 
@@ -136,7 +132,6 @@ def home():
     return redirect(url_for("batches"))
 
 
-# ✅ Today tab always shows today's spider grid for last batch
 @app.route("/today")
 def today_route():
     batch_id = _get_last_batch_id()
@@ -265,6 +260,52 @@ def batch_view_day(batch_id: int, day: str):
     )
 
 
+# ---------- UPDATE SPIDER NAME ----------
+
+@app.route("/set_spider_name", methods=["POST"])
+def set_spider_name():
+    """
+    Body can be form-data OR JSON:
+    - spider_id: int
+    - name: string
+    """
+    spider_id = None
+    name = ""
+
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        spider_id = data.get("spider_id")
+        name = (data.get("name") or "").strip()
+    else:
+        try:
+            spider_id = int(request.form.get("spider_id", "0"))
+        except:
+            spider_id = 0
+        name = (request.form.get("name") or "").strip()
+
+    try:
+        spider_id = int(spider_id or 0)
+    except:
+        spider_id = 0
+
+    if spider_id <= 0:
+        return ("bad spider_id", 400)
+
+    # Optional: cap name length
+    if len(name) > 40:
+        name = name[:40]
+
+    with connect() as conn:
+        row = conn.execute("SELECT id FROM spiders WHERE id=?", (spider_id,)).fetchone()
+        if not row:
+            return ("not found", 404)
+
+        conn.execute("UPDATE spiders SET name=? WHERE id=?", (name, spider_id))
+        conn.commit()
+
+    return jsonify({"ok": True, "name": name})
+
+
 # ---------- SAVE SPIDER LOG (single spider) ----------
 
 @app.route("/spiderlog/<int:spider_id>/<day>", methods=["POST"])
@@ -344,7 +385,6 @@ def bulk_apply(batch_id: int, day: str):
         booty = 3
     booty = max(1, min(5, booty))
 
-    # Safety: only allow spiders that belong to this batch
     with connect() as conn:
         valid = conn.execute(
             f"SELECT id FROM spiders WHERE batch_id=? AND id IN ({','.join(['?']*len(spider_ids))})",
@@ -424,7 +464,7 @@ def calendar_view(year=None, month=None):
     year = year or today.year
     month = month or today.month
 
-    cal = pycal.Calendar(firstweekday=6)  # Sunday start
+    cal = pycal.Calendar(firstweekday=6)
     weeks = cal.monthdatescalendar(year, month)
 
     month_name = pycal.month_name[month]
@@ -440,7 +480,6 @@ def calendar_view(year=None, month=None):
 
     batch_id = _get_last_batch_id()
 
-    # Mark days that have ANY spiderlog entries (for this batch)
     has_data_days = set()
     if batch_id and weeks:
         start = weeks[0][0].isoformat()

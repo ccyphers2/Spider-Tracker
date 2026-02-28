@@ -8,6 +8,9 @@
     <div class="tool-row">
       <button class="tool-btn" type="button" onclick="toggleHighlight()">Highlight</button>
       <button class="tool-btn" type="button" id="selectBtn" onclick="toggleSelectMode()">Select</button>
+
+      <!-- NEW: Toggle showing names on chips -->
+      <button class="tool-btn" type="button" id="nameToggleBtn" onclick="toggleNames()">Names: On</button>
     </div>
 
     <div class="last-fed">
@@ -34,7 +37,8 @@
       </div>
       <div class="select-actions">
         <button class="btn-outline" type="button" onclick="selectAll()">All</button>
-        <button class="btn" type="button" onclick="openBulk()">Done</button>
+        <!-- CHANGED: Done -> Edit -->
+        <button class="btn" type="button" onclick="openBulk()">Edit</button>
       </div>
     </div>
 
@@ -59,9 +63,11 @@
       <button class="spider-chip"
               data-spider-id="{{ spider['id'] }}"
               data-spider-number="{{ spider['number'] }}"
+              data-spider-name="{{ sname|e }}"
               onclick="chipClick(event, {{ spider['id'] }})"
               {% if hc %} style="background: {{ hc }}; border-color: {{ hc }}; color:#fff;" {% endif %}>
-        #{{ spider["number"] }}{% if sname %}<span class="chip-name"> {{ sname }}</span>{% endif %}
+        <span class="chip-num">#{{ spider["number"] }}</span>
+        {% if sname %}<span class="chip-name"> {{ sname }}</span>{% endif %}
       </button>
 
       {% set log = log_map.get(spider["id"]) %}
@@ -71,7 +77,7 @@
         <div class="day-dialog-header">
           <div>
             <div class="day-dialog-date">
-              Spider #{{ spider["number"] }}{% if sname %} — {{ sname }}{% endif %}
+              <span id="dlgTitle{{ spider['id'] }}">Spider #{{ spider["number"] }}{% if sname %} — {{ sname }}{% endif %}</span>
             </div>
             <div class="day-dialog-status">Day: {{ day }}</div>
           </div>
@@ -82,6 +88,18 @@
             <button class="day-dialog-close" type="button"
                     onclick="document.getElementById('dlg{{ spider['id'] }}').close()">✕</button>
           </div>
+        </div>
+
+        <!-- NAME EDIT (optional) -->
+        <div class="name-edit">
+          <div class="label" style="margin: 0 0 8px 0;">Spider name (optional)</div>
+          <div class="name-row">
+            <input class="input name-input" id="name{{ spider['id'] }}" type="text" maxlength="40"
+                   placeholder="(leave blank for number only)"
+                   value="{{ sname }}">
+            <button class="btn-outline name-save" type="button" onclick="saveName({{ spider['id'] }})">Save name</button>
+          </div>
+          <div class="hint" id="nameHint{{ spider['id'] }}" style="display:none;">Saved ✅</div>
         </div>
 
         <form method="post" action="/spiderlog/{{ spider['id'] }}/{{ day }}">
@@ -145,8 +163,9 @@
           </div>
 
           <div class="day-dialog-actions">
+            <!-- CHANGED: Save & back out -> Done -->
             <button class="btn-outline" type="button"
-                    onclick="document.getElementById('dlg{{ spider['id'] }}').close()">Save &amp; back out</button>
+                    onclick="document.getElementById('dlg{{ spider['id'] }}').close()">Done</button>
             <button class="btn" type="submit">Save</button>
           </div>
         </form>
@@ -236,15 +255,32 @@
   let selectMode = false;
   const selected = new Set();
 
+  // --- Names toggle (persist in localStorage) ---
+  let showNames = (localStorage.getItem("showNames") ?? "1") === "1";
+
   // --- Spider ordering for next/prev nav ---
   const spiderIds = Array.from(document.querySelectorAll(".spider-chip")).map(x => Number(x.dataset.spiderId));
+
+  function applyNameVisibility(){
+    document.body.classList.toggle("hide-names", !showNames);
+    const btn = document.getElementById("nameToggleBtn");
+    if(btn) btn.textContent = "Names: " + (showNames ? "On" : "Off");
+  }
+
+  function toggleNames(){
+    showNames = !showNames;
+    localStorage.setItem("showNames", showNames ? "1" : "0");
+    applyNameVisibility();
+  }
+
+  applyNameVisibility();
 
   function toggleHighlight(){
     highlightMode = !highlightMode;
     document.getElementById("palette").classList.toggle("hidden", !highlightMode);
     document.getElementById("highlightStatus").textContent =
       "Highlight mode: " + (highlightMode ? "On (pick a color, then tap spiders)" : "Off");
-    if(highlightMode && selectMode) toggleSelectMode(); // don't mix modes
+    if(highlightMode && selectMode) toggleSelectMode();
   }
 
   function selectColor(c){
@@ -348,7 +384,6 @@
     btn.classList.add("selected");
   }
 
-  // --- swipe + next/prev ---
   function navSpider(dir, currentId){
     const idx = spiderIds.indexOf(currentId);
     if(idx === -1) return;
@@ -357,6 +392,56 @@
 
     document.getElementById("dlg" + currentId).close();
     document.getElementById("dlg" + spiderIds[nextIdx]).showModal();
+  }
+
+  // --- Save spider name ---
+  async function saveName(spiderId){
+    const input = document.getElementById("name" + spiderId);
+    const name = (input.value || "").trim();
+
+    const res = await fetch("/set_spider_name", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ spider_id: spiderId, name })
+    });
+
+    if(!res.ok){
+      alert("Name save failed");
+      return;
+    }
+
+    const data = await res.json();
+    const newName = data.name || "";
+
+    // Update chip dataset + text
+    const chip = document.querySelector(`.spider-chip[data-spider-id="${spiderId}"]`);
+    if(chip){
+      chip.dataset.spiderName = newName;
+      let nameSpan = chip.querySelector(".chip-name");
+      if(newName){
+        if(!nameSpan){
+          nameSpan = document.createElement("span");
+          nameSpan.className = "chip-name";
+          chip.appendChild(nameSpan);
+        }
+        nameSpan.textContent = " " + newName;
+      }else{
+        if(nameSpan) nameSpan.remove();
+      }
+    }
+
+    // Update dialog title
+    const number = chip ? chip.dataset.spiderNumber : "";
+    const title = document.getElementById("dlgTitle" + spiderId);
+    if(title){
+      title.textContent = newName ? `Spider #${number} — ${newName}` : `Spider #${number}`;
+    }
+
+    const hint = document.getElementById("nameHint" + spiderId);
+    if(hint){
+      hint.style.display = "block";
+      setTimeout(() => { hint.style.display = "none"; }, 900);
+    }
   }
 
   // --- Bulk apply ---
@@ -406,7 +491,6 @@
       return;
     }
 
-    // Exit selection mode + reload
     document.getElementById("bulkDlg").close();
     toggleSelectMode();
     location.reload();
