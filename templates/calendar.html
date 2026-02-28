@@ -7,7 +7,7 @@
 
     <div class="cal-title">
       <div class="cal-month">{{ month_name }} {{ year }}</div>
-      <div class="cal-sub">Tap a day to open that day’s spider grid</div>
+      <div class="cal-sub">Tap a day to open that day’s spider grid (hold for summary)</div>
     </div>
 
     <a class="btn-outline" href="{{ url_for('calendar_view', year=next_y, month=next_m) }}">Next →</a>
@@ -29,7 +29,8 @@
                   {% if not in_month %}muted{% endif %}
                   {% if dstr == today.isoformat() %}today{% endif %}
                   {% if has_data %}has-data{% endif %}"
-           href="{{ url_for('batch_view_day', batch_id=batch_id, day=dstr) }}">
+           href="{{ url_for('batch_view_day', batch_id=batch_id, day=dstr) }}"
+           data-day="{{ dstr }}">
           <div class="cal-day-num">{{ d.day }}</div>
 
           {% if has_data %}
@@ -40,5 +41,139 @@
     {% endfor %}
   </div>
 </div>
+
+<!-- Long-press summary dialog -->
+<dialog class="day-dialog" id="sumDlg">
+  <div class="day-dialog-header">
+    <div>
+      <div class="day-dialog-date" id="sumTitle">Day Summary</div>
+      <div class="day-dialog-status" id="sumSub"></div>
+    </div>
+    <button class="day-dialog-close" type="button" onclick="document.getElementById('sumDlg').close()">✕</button>
+  </div>
+
+  <div class="day-dialog-body">
+    <div class="sum-block">
+      <div class="label">Fed</div>
+      <div class="sum-line" id="sumFed">—</div>
+    </div>
+
+    <div class="sum-block">
+      <div class="label">Ate</div>
+      <div class="sum-line" id="sumAte">—</div>
+    </div>
+
+    <div class="sum-block">
+      <div class="label">Watered</div>
+      <div class="sum-line" id="sumWatered">—</div>
+    </div>
+
+    <div class="sum-block">
+      <div class="label">Molting</div>
+      <div class="sum-line" id="sumMolting">—</div>
+    </div>
+
+    <div class="sum-block">
+      <div class="label">Abdomen size</div>
+      <div class="sum-booty" id="sumBooty"></div>
+      <div class="hint">Grouped by size (1–5)</div>
+    </div>
+  </div>
+
+  <div class="day-dialog-actions">
+    <button class="btn-outline" type="button" onclick="document.getElementById('sumDlg').close()">Close</button>
+  </div>
+</dialog>
+
+<script>
+(function(){
+  const batchId = {{ batch_id or 0 }};
+  if(!batchId) return;
+
+  let holdTimer = null;
+  let holding = false;
+
+  function fmtList(arr){
+    if(!arr || arr.length === 0) return "—";
+    return arr.join(", ");
+  }
+
+  function setText(id, txt){
+    const el = document.getElementById(id);
+    if(el) el.textContent = txt;
+  }
+
+  function renderBooty(bootyObj){
+    const box = document.getElementById("sumBooty");
+    if(!box) return;
+    box.innerHTML = "";
+
+    const keys = ["1","2","3","4","5"];
+    keys.forEach(k=>{
+      const row = document.createElement("div");
+      row.className = "sum-booty-row";
+      row.innerHTML = `<div class="sum-booty-k">Size ${k}</div><div class="sum-booty-v">${fmtList(bootyObj[k] || [])}</div>`;
+      box.appendChild(row);
+    });
+  }
+
+  async function openSummary(dayStr){
+    const res = await fetch(`/day_summary/${batchId}/${dayStr}`);
+    if(!res.ok){
+      alert("Summary failed");
+      return;
+    }
+    const data = await res.json();
+    if(!data.ok) return;
+
+    setText("sumTitle", "Day Summary");
+    setText("sumSub", data.pretty_day || dayStr);
+
+    setText("sumFed", fmtList(data.fed));
+    setText("sumAte", fmtList(data.ate));
+    setText("sumWatered", fmtList(data.watered));
+    setText("sumMolting", fmtList(data.molting));
+    renderBooty(data.booty || {});
+
+    document.getElementById("sumDlg").showModal();
+  }
+
+  // long-press handling on calendar days
+  document.querySelectorAll(".cal-day[data-day]").forEach(a=>{
+    const dayStr = a.dataset.day;
+
+    const startHold = (e)=>{
+      holding = false;
+      // start a timer; if it completes, open summary
+      holdTimer = setTimeout(()=>{
+        holding = true;
+        openSummary(dayStr);
+      }, 450);
+    };
+
+    const cancelHold = ()=>{
+      if(holdTimer) clearTimeout(holdTimer);
+      holdTimer = null;
+    };
+
+    a.addEventListener("touchstart", startHold, {passive:true});
+    a.addEventListener("touchend", (e)=>{
+      cancelHold();
+      // If we long-pressed, prevent navigation on release
+      if(holding){
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    }, {passive:false});
+    a.addEventListener("touchmove", cancelHold, {passive:true});
+    a.addEventListener("touchcancel", cancelHold, {passive:true});
+
+    // also allow mouse hold (desktop)
+    a.addEventListener("mousedown", startHold);
+    a.addEventListener("mouseup", cancelHold);
+    a.addEventListener("mouseleave", cancelHold);
+  });
+})();
+</script>
 
 {% endblock %}

@@ -1,6 +1,6 @@
 import os
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import calendar as pycal
 from threading import Lock
 
@@ -9,7 +9,6 @@ from flask import Flask, render_template, request, redirect, url_for, session, a
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "change-me")
 
-# Render persistent disk path
 DB_PATH = os.environ.get("DB_PATH", "jumper.db")
 
 COLOR_OPTIONS = [
@@ -98,7 +97,7 @@ def init_db_once():
             )
             """)
 
-            # Migrations for older DBs (safe)
+            # migrations
             if _table_exists(conn, "spiders") and not _col_exists(conn, "spiders", "name"):
                 conn.execute("ALTER TABLE spiders ADD COLUMN name TEXT DEFAULT ''")
 
@@ -107,6 +106,7 @@ def init_db_once():
 
             conn.execute("CREATE INDEX IF NOT EXISTS idx_spiderlog_day ON spiderlog(day)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_spiders_batch ON spiders(batch_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_spiderlog_spider ON spiderlog(spider_id)")
 
             conn.commit()
 
@@ -125,6 +125,16 @@ def _get_last_batch_id():
     with connect() as conn:
         row = conn.execute("SELECT id FROM batches ORDER BY id DESC LIMIT 1").fetchone()
     return row["id"] if row else None
+
+
+def _parse_day(day: str) -> date:
+    return datetime.strptime(day, "%Y-%m-%d").date()
+
+
+def _pretty_day(day_str: str) -> str:
+    d = _parse_day(day_str)
+    # example: "Sat, Feb 28, 2026"
+    return d.strftime("%a, %b %d, %Y")
 
 
 @app.route("/")
@@ -222,6 +232,10 @@ def batch_view_day(batch_id: int, day: str):
 
     session["last_batch"] = batch_id
 
+    day_obj = _parse_day(day)
+    prev_day = (day_obj - timedelta(days=1)).isoformat()
+    next_day = (day_obj + timedelta(days=1)).isoformat()
+
     with connect() as conn:
         batch = conn.execute("SELECT * FROM batches WHERE id=?", (batch_id,)).fetchone()
         if not batch:
@@ -253,6 +267,9 @@ def batch_view_day(batch_id: int, day: str):
         batch=batch,
         spiders=spiders,
         day=day,
+        pretty_day=_pretty_day(day),
+        prev_day=prev_day,
+        next_day=next_day,
         log_map=log_map,
         highlight_map=highlight_map,
         color_options=COLOR_OPTIONS,
@@ -264,11 +281,6 @@ def batch_view_day(batch_id: int, day: str):
 
 @app.route("/set_spider_name", methods=["POST"])
 def set_spider_name():
-    """
-    Body can be form-data OR JSON:
-    - spider_id: int
-    - name: string
-    """
     spider_id = None
     name = ""
 
@@ -291,7 +303,6 @@ def set_spider_name():
     if spider_id <= 0:
         return ("bad spider_id", 400)
 
-    # Optional: cap name length
     if len(name) > 40:
         name = name[:40]
 
@@ -356,7 +367,7 @@ def save_spiderlog(spider_id: int, day: str):
     return redirect(url_for("batch_view_day", batch_id=batch_id, day=day))
 
 
-# ---------- BULK APPLY (Selection Mode) ----------
+# ---------- BULK APPLY ----------
 
 @app.route("/bulk_apply/<int:batch_id>/<day>", methods=["POST"])
 def bulk_apply(batch_id: int, day: str):
@@ -375,10 +386,12 @@ def bulk_apply(batch_id: int, day: str):
     watered = data.get("watered", "no")
     molting = data.get("molting", "no")
     notes = data.get("notes", "")
+
     try:
         molts_count = int(data.get("molts_count", 0))
     except:
         molts_count = 0
+
     try:
         booty = int(data.get("booty", 3))
     except:
@@ -390,6 +403,7 @@ def bulk_apply(batch_id: int, day: str):
             f"SELECT id FROM spiders WHERE batch_id=? AND id IN ({','.join(['?']*len(spider_ids))})",
             [batch_id] + spider_ids
         ).fetchall()
+
         valid_ids = [r["id"] for r in valid]
         if not valid_ids:
             return ("no valid spiders", 400)
@@ -455,7 +469,7 @@ def set_last_fed():
     return ("ok", 200)
 
 
-# ---------- CALENDAR (Month+Year + day markers) ----------
+# ---------- CALENDAR ----------
 
 @app.route("/calendar")
 @app.route("/calendar/<int:year>/<int:month>")
@@ -466,7 +480,6 @@ def calendar_view(year=None, month=None):
 
     cal = pycal.Calendar(firstweekday=6)
     weeks = cal.monthdatescalendar(year, month)
-
     month_name = pycal.month_name[month]
 
     prev_y, prev_m = year, month - 1
@@ -505,6 +518,69 @@ def calendar_view(year=None, month=None):
         next_y=next_y, next_m=next_m,
         has_data_days=has_data_days
     )
+
+
+# ---------- DAY SUMMARY (for calendar long-press) ----------
+
+@app.route("/day_summary/<int:batch_id>/<day>")
+def day_summary(batch_id: int, day: str):
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        return ("bad day", 400)
+
+    with connect() as conn:
+        # only spiders in this batch
+        rows = conn.execute("""
+            SELECT s.number, s.name,
+                   l.fed, l.ate, l.watered, l.molting, l.booty
+            FROM spiders s
+            LEFT JOIN spiderlog l
+              ON l.spider_id = s.id AND l.day = ?
+            WHERE s.batch_id = ?
+            ORDER BY s.number ASC
+        """, (day, batch_id)).fetchall()
+
+    fed_yes, ate_yes, watered_yes, molting_yes = [], [], [], []
+    booty_groups = {1: [], 2: [], 3: [], 4: [], 5: []}
+
+    for r in rows:
+        num = int(r["number"])
+        if (r["fed"] or "no") == "yes":
+            fed_yes.append(num)
+        if (r["ate"] or "no") == "yes":
+            ate_yes.append(num)
+        if (r["watered"] or "no") == "yes":
+            watered_yes.append(num)
+        if (r["molting"] or "no") == "yes":
+            molting_yes.append(num)
+
+        b = r["booty"]
+        if b is None:
+            b = 3
+        try:
+            b = int(b)
+        except:
+            b = 3
+        b = max(1, min(5, b))
+        booty_groups[b].append(num)
+
+    return jsonify({
+        "ok": True,
+        "day": day,
+        "pretty_day": _pretty_day(day),
+        "fed": fed_yes,
+        "ate": ate_yes,
+        "watered": watered_yes,
+        "molting": molting_yes,
+        "booty": {
+            "1": booty_groups[1],
+            "2": booty_groups[2],
+            "3": booty_groups[3],
+            "4": booty_groups[4],
+            "5": booty_groups[5],
+        }
+    })
 
 
 if __name__ == "__main__":

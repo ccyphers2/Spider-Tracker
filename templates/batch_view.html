@@ -2,14 +2,24 @@
 {% block content %}
 
 <div class="card">
-  <h2>{{ batch["name"] }}</h2>
+  <div class="batch-head">
+    <div>
+      <h2 style="margin:0;">{{ batch["name"] }}</h2>
+      <div class="subtle" style="margin-top:6px;">
+        <span class="date-pill">{{ pretty_day }}</span>
+      </div>
+    </div>
+
+    <div class="day-nav">
+      <a class="btn-outline" href="{{ url_for('batch_view_day', batch_id=batch['id'], day=prev_day) }}">←</a>
+      <a class="btn-outline" href="{{ url_for('batch_view_day', batch_id=batch['id'], day=next_day) }}">→</a>
+    </div>
+  </div>
 
   <div class="top-tools">
     <div class="tool-row">
       <button class="tool-btn" type="button" onclick="toggleHighlight()">Highlight</button>
       <button class="tool-btn" type="button" id="selectBtn" onclick="toggleSelectMode()">Select</button>
-
-      <!-- NEW: Toggle showing names on chips -->
       <button class="tool-btn" type="button" id="nameToggleBtn" onclick="toggleNames()">Names: On</button>
     </div>
 
@@ -37,7 +47,6 @@
       </div>
       <div class="select-actions">
         <button class="btn-outline" type="button" onclick="selectAll()">All</button>
-        <!-- CHANGED: Done -> Edit -->
         <button class="btn" type="button" onclick="openBulk()">Edit</button>
       </div>
     </div>
@@ -56,30 +65,34 @@
 </div>
 
 <div class="card pad-bottom-safe">
-  <div class="spider-grid" id="grid">
+  <div class="spider-grid-clean" id="grid">
     {% for spider in spiders %}
       {% set hc = highlight_map.get(spider["id"], '') %}
       {% set sname = (spider["name"] or "") %}
-      <button class="spider-chip"
+
+      <button class="spider-card"
               data-spider-id="{{ spider['id'] }}"
               data-spider-number="{{ spider['number'] }}"
               data-spider-name="{{ sname|e }}"
               onclick="chipClick(event, {{ spider['id'] }})"
               {% if hc %} style="background: {{ hc }}; border-color: {{ hc }}; color:#fff;" {% endif %}>
-        <span class="chip-num">#{{ spider["number"] }}</span>
-        {% if sname %}<span class="chip-name"> {{ sname }}</span>{% endif %}
+        <div class="card-num">#{{ spider["number"] }}</div>
+        <div class="card-main">
+          <div class="card-center-name">{% if sname %}{{ sname }}{% else %}&nbsp;{% endif %}</div>
+          <div class="card-center-num">#{{ spider["number"] }}</div>
+        </div>
       </button>
 
       {% set log = log_map.get(spider["id"]) %}
       {% set booty = (log["booty"] if log else 3) %}
 
-      <dialog class="day-dialog" id="dlg{{ spider['id'] }}">
+      <dialog class="day-dialog day-dialog-full" id="dlg{{ spider['id'] }}">
         <div class="day-dialog-header">
           <div>
             <div class="day-dialog-date">
               <span id="dlgTitle{{ spider['id'] }}">Spider #{{ spider["number"] }}{% if sname %} — {{ sname }}{% endif %}</span>
             </div>
-            <div class="day-dialog-status">Day: {{ day }}</div>
+            <div class="day-dialog-status">{{ pretty_day }}</div>
           </div>
 
           <div class="dialog-nav">
@@ -90,14 +103,13 @@
           </div>
         </div>
 
-        <!-- NAME EDIT (optional) -->
         <div class="name-edit">
           <div class="label" style="margin: 0 0 8px 0;">Spider name (optional)</div>
           <div class="name-row">
             <input class="input name-input" id="name{{ spider['id'] }}" type="text" maxlength="40"
                    placeholder="(leave blank for number only)"
                    value="{{ sname }}">
-            <button class="btn-outline name-save" type="button" onclick="saveName({{ spider['id'] }})">Save name</button>
+            <button class="btn-outline name-save" type="button" onclick="saveName({{ spider['id'] }})">Save</button>
           </div>
           <div class="hint" id="nameHint{{ spider['id'] }}" style="display:none;">Saved ✅</div>
         </div>
@@ -163,7 +175,6 @@
           </div>
 
           <div class="day-dialog-actions">
-            <!-- CHANGED: Save & back out -> Done -->
             <button class="btn-outline" type="button"
                     onclick="document.getElementById('dlg{{ spider['id'] }}').close()">Done</button>
             <button class="btn" type="submit">Save</button>
@@ -180,7 +191,7 @@
   <div class="day-dialog-header">
     <div>
       <div class="day-dialog-date">Apply to selected spiders</div>
-      <div class="day-dialog-status">Day: {{ day }}</div>
+      <div class="day-dialog-status">{{ pretty_day }}</div>
     </div>
     <button class="day-dialog-close" type="button" onclick="document.getElementById('bulkDlg').close()">✕</button>
   </div>
@@ -255,24 +266,22 @@
   let selectMode = false;
   const selected = new Set();
 
-  // --- Names toggle (persist in localStorage) ---
+  // --- Names toggle (persist) ---
   let showNames = (localStorage.getItem("showNames") ?? "1") === "1";
 
-  // --- Spider ordering for next/prev nav ---
-  const spiderIds = Array.from(document.querySelectorAll(".spider-chip")).map(x => Number(x.dataset.spiderId));
+  // --- Spider ordering ---
+  const spiderIds = Array.from(document.querySelectorAll(".spider-card")).map(x => Number(x.dataset.spiderId));
 
   function applyNameVisibility(){
     document.body.classList.toggle("hide-names", !showNames);
     const btn = document.getElementById("nameToggleBtn");
     if(btn) btn.textContent = "Names: " + (showNames ? "On" : "Off");
   }
-
   function toggleNames(){
     showNames = !showNames;
     localStorage.setItem("showNames", showNames ? "1" : "0");
     applyNameVisibility();
   }
-
   applyNameVisibility();
 
   function toggleHighlight(){
@@ -312,7 +321,7 @@
 
   function refreshSelectedUI(){
     document.getElementById("selCount").textContent = String(selected.size);
-    document.querySelectorAll(".spider-chip").forEach(btn => {
+    document.querySelectorAll(".spider-card").forEach(btn => {
       const id = Number(btn.dataset.spiderId);
       btn.classList.toggle("selected-chip", selected.has(id));
     });
@@ -340,7 +349,7 @@
 
       const res = await fetch("/set_highlight", { method: "POST", body: fd });
       if(res.ok){
-        const btn = document.querySelector(`[data-spider-id="${spiderId}"]`);
+        const btn = document.querySelector(`.spider-card[data-spider-id="${spiderId}"]`);
         if(currentColor){
           btn.style.background = currentColor;
           btn.style.borderColor = currentColor;
@@ -354,7 +363,7 @@
       return;
     }
 
-    document.getElementById("dlg" + spiderId).showModal();
+    openSpiderDialog(spiderId);
   }
 
   function toggleLastFed(){
@@ -391,10 +400,9 @@
     if(nextIdx < 0 || nextIdx >= spiderIds.length) return;
 
     document.getElementById("dlg" + currentId).close();
-    document.getElementById("dlg" + spiderIds[nextIdx]).showModal();
+    openSpiderDialog(spiderIds[nextIdx]);
   }
 
-  // --- Save spider name ---
   async function saveName(spiderId){
     const input = document.getElementById("name" + spiderId);
     const name = (input.value || "").trim();
@@ -413,25 +421,14 @@
     const data = await res.json();
     const newName = data.name || "";
 
-    // Update chip dataset + text
-    const chip = document.querySelector(`.spider-chip[data-spider-id="${spiderId}"]`);
-    if(chip){
-      chip.dataset.spiderName = newName;
-      let nameSpan = chip.querySelector(".chip-name");
-      if(newName){
-        if(!nameSpan){
-          nameSpan = document.createElement("span");
-          nameSpan.className = "chip-name";
-          chip.appendChild(nameSpan);
-        }
-        nameSpan.textContent = " " + newName;
-      }else{
-        if(nameSpan) nameSpan.remove();
-      }
+    const card = document.querySelector(`.spider-card[data-spider-id="${spiderId}"]`);
+    if(card){
+      card.dataset.spiderName = newName;
+      const centerName = card.querySelector(".card-center-name");
+      if(centerName) centerName.textContent = newName ? newName : " ";
     }
 
-    // Update dialog title
-    const number = chip ? chip.dataset.spiderNumber : "";
+    const number = card ? card.dataset.spiderNumber : "";
     const title = document.getElementById("dlgTitle" + spiderId);
     if(title){
       title.textContent = newName ? `Spider #${number} — ${newName}` : `Spider #${number}`;
@@ -495,6 +492,75 @@
     toggleSelectMode();
     location.reload();
   }
+
+  // ---- FULLSCREEN "TINDER" SWIPE ----
+  function openSpiderDialog(spiderId){
+    const dlg = document.getElementById("dlg" + spiderId);
+    if(!dlg) return;
+    dlg.showModal();
+
+    // attach swipe handler once per dialog
+    if(dlg.dataset.swipeInit === "1") return;
+    dlg.dataset.swipeInit = "1";
+
+    let startX = 0, startY = 0, tracking = false;
+
+    dlg.addEventListener("touchstart", (e) => {
+      if(!e.touches || e.touches.length !== 1) return;
+      // don’t start swipe if user touches inside inputs/textareas
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+      if(tag === "input" || tag === "textarea" || tag === "button" || tag === "label") return;
+
+      tracking = true;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }, {passive:true});
+
+    dlg.addEventListener("touchend", (e) => {
+      if(!tracking) return;
+      tracking = false;
+
+      const touch = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
+      if(!touch) return;
+
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+
+      // horizontal swipe threshold
+      if(Math.abs(dx) < 60) return;
+      if(Math.abs(dy) > 80) return;
+
+      if(dx < 0) navSpider(1, spiderId);   // swipe left -> next
+      else navSpider(-1, spiderId);        // swipe right -> prev
+    }, {passive:true});
+  }
+
+  // ---- OPTIONAL: swipe day navigation (page-level) ----
+  (function(){
+    let sx=0, sy=0, active=false;
+    document.addEventListener("touchstart", (e)=>{
+      if(!e.touches || e.touches.length!==1) return;
+      // ignore if a dialog is open
+      if(document.querySelector("dialog[open]")) return;
+      active=true;
+      sx=e.touches[0].clientX; sy=e.touches[0].clientY;
+    }, {passive:true});
+
+    document.addEventListener("touchend", (e)=>{
+      if(!active) return;
+      active=false;
+      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
+      if(!t) return;
+
+      const dx=t.clientX-sx;
+      const dy=t.clientY-sy;
+      if(Math.abs(dx) < 90) return;
+      if(Math.abs(dy) > 100) return;
+
+      if(dx < 0) window.location.href = "{{ url_for('batch_view_day', batch_id=batch['id'], day=next_day) }}";
+      else window.location.href = "{{ url_for('batch_view_day', batch_id=batch['id'], day=prev_day) }}";
+    }, {passive:true});
+  })();
 </script>
 
 {% endblock %}

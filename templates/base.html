@@ -12,9 +12,9 @@
   </div>
 
   <nav class="bottom-nav">
-    <a href="/today">🕷 Today</a>
-    <a href="/calendar">📅 Calendar</a>
-    <a href="/batches">📦 Batches</a>
+    <a href="{{ url_for('today_route') }}">🕷 Today</a>
+    <a href="{{ url_for('calendar_view') }}">📅 Calendar</a>
+    <a href="{{ url_for('batches') }}">📦 Batches</a>
   </nav>
 </body>
 </html>

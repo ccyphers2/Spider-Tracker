@@ -12,17 +12,24 @@
 </div>
 
 {% if batches %}
-  {% for batch in batches %}
-    <div class="card">
-      <h3>{{ batch["name"] }}</h3>
-      <p>Spiders: {{ count_map.get(batch["id"], 0) }}</p>
-
-      <a class="btn" href="{{ url_for('batch_view', batch_id=batch['id']) }}">Open</a>
-      <a class="btn-outline" style="margin-left:10px;"
-         href="{{ url_for('delete_batch', batch_id=batch['id']) }}"
-         onclick="return confirm('Delete this batch?')">Delete</a>
+  <div class="card">
+    <div class="batch-list">
+      {% for batch in batches %}
+        <div class="batch-tile">
+          <div class="batch-left">
+            <div class="batch-name">{{ batch["name"] }}</div>
+            <div class="batch-sub">Spiders: {{ count_map.get(batch["id"], 0) }}</div>
+          </div>
+          <div class="batch-actions">
+            <a class="btn" href="{{ url_for('batch_view', batch_id=batch['id']) }}">Open</a>
+            <a class="btn-outline"
+               href="{{ url_for('delete_batch', batch_id=batch['id']) }}"
+               onclick="return confirm('Delete this batch?')">Delete</a>
+          </div>
+        </div>
+      {% endfor %}
     </div>
-  {% endfor %}
+  </div>
 {% else %}
   <div class="card">
     <p>No batches yet. Create one above.</p>
