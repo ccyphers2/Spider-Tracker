@@ -5,14 +5,16 @@
   --text:#111827;
   --blue:#3b82f6;
 
-  /* Bottom nav sizing (used to avoid overlap) */
   --nav-h: 74px;
 
-  /* Tiles should ALWAYS be white (both modes) */
+  /* Tiles ALWAYS white + black text */
   --tile:#ffffff;
   --tileText:#111827;
   --tileBorder: rgba(17,24,39,.12);
   --tileBgSoft: rgba(17,24,39,.04);
+
+  /* Abdomen color (black in light mode) */
+  --abd:#111827;
 }
 
 @media (prefers-color-scheme: dark){
@@ -23,15 +25,20 @@
     --text:#f9fafb;
     --blue:#60a5fa;
 
-    /* KEEP tiles white even in dark mode */
+    /* STILL white tiles even in dark mode */
     --tile:#ffffff;
     --tileText:#111827;
     --tileBorder: rgba(17,24,39,.14);
     --tileBgSoft: rgba(17,24,39,.05);
+
+    /* Abdomen color (white in dark mode) */
+    --abd:#ffffff;
   }
 }
 
 *{ box-sizing:border-box; }
+
+html, body{ height:100%; }
 
 body{
   background:var(--bg);
@@ -41,12 +48,10 @@ body{
   overscroll-behavior-y: none;
 }
 
-/* Page padding accounts for the fixed bottom nav + iPhone safe area */
 .page{
   padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
 }
 
-/* Cards */
 .card{
   background:var(--card);
   padding:16px;
@@ -55,16 +60,11 @@ body{
   box-shadow:0 6px 18px rgba(0,0,0,.08);
 }
 
-.pad-bottom-safe{
-  padding-bottom: 22px;
-}
+.pad-bottom-safe{ padding-bottom: 22px; }
 
-/* Bottom nav */
 .bottom-nav{
   position:fixed;
-  bottom:0;
-  left:0;
-  right:0;
+  bottom:0; left:0; right:0;
   background:var(--card);
   display:flex;
   justify-content:space-around;
@@ -72,14 +72,12 @@ body{
   border-top:1px solid rgba(255,255,255,.12);
   z-index: 9999;
 }
-
 .bottom-nav a{
   color: var(--text);
   text-decoration: none;
   font-weight: 800;
 }
 
-/* Buttons */
 .btn, .btn-outline{
   display:inline-block;
   text-align:center;
@@ -96,10 +94,15 @@ body{
   color: white;
 }
 
-.btn-outline {
+.btn-outline{
   background: transparent;
   color: var(--text);
   border: 1px solid rgba(255, 255, 255, .12);
+}
+
+.btn-outline.disabled{
+  opacity:.5;
+  pointer-events:none;
 }
 
 .tool-btn{
@@ -112,11 +115,7 @@ body{
   touch-action: manipulation;
 }
 
-.tool-row{
-  display:flex;
-  gap:10px;
-  flex-wrap: wrap;
-}
+.tool-row{ display:flex; gap:10px; flex-wrap: wrap; }
 
 .subtle{
   opacity:.75;
@@ -124,11 +123,7 @@ body{
   margin-top: 10px;
 }
 
-.top-tools{
-  display:flex;
-  flex-direction: column;
-  gap: 12px;
-}
+.top-tools{ display:flex; flex-direction: column; gap: 12px; }
 
 .last-fed{
   display:flex;
@@ -144,12 +139,7 @@ body{
   background: transparent;
 }
 
-.palette{
-  display:flex;
-  gap:10px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
+.palette{ display:flex; gap:10px; flex-wrap: wrap; margin-top: 10px; }
 .hidden{ display:none; }
 
 .swatch{
@@ -163,17 +153,14 @@ body{
   font-weight: 900;
 }
 
-/* --- header row for batch page --- */
+/* header row */
 .batch-head{
   display:flex;
   align-items:flex-start;
   justify-content:space-between;
   gap:12px;
 }
-.day-nav{
-  display:flex;
-  gap:10px;
-}
+.day-nav{ display:flex; gap:10px; }
 .date-pill{
   display:inline-block;
   padding: 6px 10px;
@@ -182,7 +169,7 @@ body{
   background: rgba(255,255,255,.06);
 }
 
-/* --- NEW CLEAN GRID --- */
+/* grid */
 .spider-grid-clean{
   display:grid;
   grid-template-columns: repeat(3, 1fr);
@@ -207,6 +194,11 @@ body{
   touch-action: manipulation;
 }
 
+.spider-link{
+  display:block;
+  text-decoration:none;
+}
+
 .spider-card .card-num{
   position:absolute;
   top: 8px;
@@ -224,21 +216,12 @@ body{
   text-align:center;
 }
 
-.card-center-name{
-  font-size: 14px;
-  font-weight: 900;
-}
-.card-center-num{
-  display:none;
-  font-size: 16px;
-  font-weight: 950;
-}
+.card-center-name{ font-size: 14px; font-weight: 900; }
+.card-center-num{ display:none; font-size: 16px; font-weight: 950; }
 
-/* names off => hide name center, show number center */
 .hide-names .card-center-name{ display:none !important; }
 .hide-names .card-center-num{ display:block !important; }
 
-/* selection outline */
 .selected-chip{
   outline: 3px solid var(--blue);
   outline-offset: 2px;
@@ -259,62 +242,19 @@ body{
 .select-left{ display:flex; flex-direction:column; }
 .select-actions{ display:flex; gap:10px; }
 
-/* ---------------- DIALOGS (still used for bulk) ---------------- */
-dialog{ display:none; }
-dialog[open]{ display:block; }
-
-.day-dialog{
-  width: min(560px, 92vw);
-  border: 0;
-  border-radius: 16px;
-  padding: 0;
-  background: var(--card);
-  color: var(--text);
-  box-shadow: 0 20px 60px rgba(0,0,0,.35);
-  max-height: calc(100dvh - 24px);
-  overflow: hidden;
-}
+/* dialog (bulk) */
+dialog{ border:0; border-radius:16px; padding:0; background:var(--card); color:var(--text); }
+.day-dialog{ width:min(560px, 92vw); max-height: calc(100dvh - 24px); overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.35); }
 .day-dialog::backdrop{ background: rgba(0,0,0,.45); }
-
 .day-dialog-header{
   display:flex;
   justify-content:space-between;
   align-items:flex-start;
   padding: 16px 16px 10px 16px;
   border-bottom: 1px solid rgba(255,255,255,.08);
-  flex: 0 0 auto;
 }
 .day-dialog-date{ font-weight:900; font-size:16px; }
 .day-dialog-status{ opacity:.7; font-size:12px; margin-top:2px; }
-
-.day-dialog-body{
-  padding: 14px 16px;
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
-  flex: 1 1 auto;
-}
-
-.day-dialog-actions{
-  display:flex;
-  gap:10px;
-  padding: 12px 16px calc(16px + env(safe-area-inset-bottom)) 16px;
-  flex: 0 0 auto;
-}
-
-.dialog-nav{
-  display:flex;
-  gap:8px;
-  align-items:center;
-}
-.nav-btn{
-  border: 1px solid rgba(255,255,255,.12);
-  background: rgba(255,255,255,.06);
-  color: var(--text);
-  border-radius: 12px;
-  font-weight: 900;
-  padding: 6px 10px;
-  touch-action: manipulation;
-}
 .day-dialog-close{
   border:0;
   background: transparent;
@@ -324,8 +264,13 @@ dialog[open]{ display:block; }
   border-radius: 10px;
   touch-action: manipulation;
 }
+.day-dialog-body{ padding:14px 16px; overflow:auto; -webkit-overflow-scrolling:touch; }
+.day-dialog-actions{ display:flex; gap:10px; padding: 12px 16px calc(16px + env(safe-area-inset-bottom)) 16px; }
 
-/* Inputs */
+/* prevent background scroll when modal open */
+.modal-open{ overflow:hidden; }
+
+/* inputs */
 .field{ margin-top: 14px; }
 .label{ font-weight: 900; font-size: 13px; margin-bottom: 8px; opacity:.85; }
 .hint{ opacity:.7; font-size: 12px; margin-top: 6px; }
@@ -351,19 +296,12 @@ dialog[open]{ display:block; }
 }
 
 /* name editor */
-.name-row{
-  display:flex;
-  gap:10px;
-  align-items:center;
-}
+.name-row{ display:flex; gap:10px; align-items:center; }
 .name-input{ flex:1; }
 .name-save{ white-space:nowrap; }
 
 /* segments */
-.seg{
-  display:flex;
-  gap:10px;
-}
+.seg{ display:flex; gap:10px; }
 .seg-item{
   flex:1;
   display:flex;
@@ -411,24 +349,25 @@ dialog[open]{ display:block; }
   padding: 6px 0;
 }
 
-/* CAL DAY TILE */
+/* FORCE white tiles even on Android weird dark mode rendering */
+.cal-day,
+.batch-tile{
+  background: var(--tile) !important;
+  color: var(--tileText) !important;
+  border: 1px solid var(--tileBorder) !important;
+}
+
+/* calendar day tile */
 .cal-day{
-  border: 1px solid var(--tileBorder);
   border-radius: 14px;
   min-height: 54px;
-  background: var(--tile);
-  color: var(--tileText);
   padding: 8px;
   text-decoration:none;
   position: relative;
-
-  /* iOS long-press cleanup */
   -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
 }
-.cal-day:hover{ background: var(--tileBgSoft); }
-.cal-day-num{ font-weight:900; font-size:14px; color: var(--tileText); }
+.cal-day:hover{ background: var(--tileBgSoft) !important; }
+.cal-day-num{ font-weight:900; font-size:14px; color: var(--tileText) !important; }
 .cal-day.muted{ opacity:.35; }
 .cal-day.today{ outline: 2px solid var(--accent); }
 .cal-day.has-data{ outline: 2px solid rgba(59,130,246,.45); }
@@ -441,14 +380,7 @@ dialog[open]{ display:block; }
   opacity: .9;
 }
 
-/* Make calendar buttons look like tiles */
-.cal-day-btn{
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-}
-
-/* calendar summary blocks */
+/* summary page */
 .sum-block{ margin-top: 10px; }
 .sum-line{
   padding: 10px 12px;
@@ -482,55 +414,10 @@ dialog[open]{ display:block; }
   font-weight: 800;
 }
 
-/* booty buttons */
-.booty-row{
-  display:flex;
-  gap:10px;
-  align-items:center;
-}
-
-.booty-btn{
-  width: 34px;
-  height: 24px;
-  border: 1px solid rgba(255,255,255,.16);
-  background: rgba(255,255,255,.06);
-  border-radius: 18px;
-  position: relative;
-  touch-action: manipulation;
-}
-.booty-btn::before{
-  content:"";
-  position:absolute;
-  top: -5px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 10px;
-  height: 8px;
-  border-radius: 10px;
-  background: rgba(255,255,255,.10);
-}
-.booty-1{ width: 22px; height: 18px; border-radius: 14px 14px 18px 18px; }
-.booty-2{ width: 26px; height: 19px; border-radius: 14px 14px 20px 20px; }
-.booty-3{ width: 30px; height: 20px; border-radius: 14px 14px 22px 22px; }
-.booty-4{ width: 34px; height: 22px; border-radius: 14px 14px 24px 24px; }
-.booty-5{ width: 38px; height: 24px; border-radius: 14px 14px 26px 26px; }
-.booty-btn.selected{
-  outline: 3px solid var(--accent);
-  outline-offset: 2px;
-}
-
 /* batches list */
-.batch-list{
-  display:flex;
-  flex-direction:column;
-  gap:12px;
-}
+.batch-list{ display:flex; flex-direction:column; gap:12px; }
 
-/* BATCH TILE */
 .batch-tile{
-  border: 1px solid var(--tileBorder);
-  background: var(--tile);
-  color: var(--tileText);
   border-radius: 14px;
   padding: 12px;
   display:flex;
@@ -538,48 +425,91 @@ dialog[open]{ display:block; }
   justify-content:space-between;
   gap:12px;
 }
-
-.batch-name{
-  font-weight: 950;
-  font-size: 16px;
-  color: var(--tileText);
-}
-
-.batch-sub{
-  opacity:.75;
-  font-size: 12px;
-  margin-top: 4px;
-  color: var(--tileText);
-}
-
+.batch-name{ font-weight: 950; font-size: 16px; color: var(--tileText) !important; }
+.batch-sub{ opacity:.75; font-size: 12px; margin-top: 4px; color: var(--tileText) !important; }
 .batch-actions{ display:flex; gap:10px; flex-wrap:wrap; }
 
-/* -------- NEW: PAGE HEADERS + STICKY SAVE BAR -------- */
-.page-head{
+/* editor page */
+.editor-head{
   display:flex;
-  gap:12px;
   align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
 }
-.page-head-mid{
-  flex:1;
+.editor-kicker{ font-weight:900; opacity:.75; font-size:12px; }
+.editor-title{ font-weight:950; font-size:18px; margin-top:4px; }
+.editor-nav{
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom: 10px;
 }
-.page-title{
-  font-weight: 950;
-  font-size: 18px;
+.editor-savebar{
+  margin-top: 14px;
+  display:flex;
+  justify-content:flex-end;
 }
 
-.soft-rule{
-  border:0;
-  border-top:1px solid rgba(255,255,255,.10);
-  margin: 14px 0;
-}
-
-/* Sticky action bar inside editor page */
-.sticky-actions{
-  position: sticky;
-  bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px);
+/* new abdomen buttons */
+.booty-row{
   display:flex;
   gap:10px;
-  background: rgba(0,0,0,0);
-  padding-top: 14px;
+  align-items:center;
+  flex-wrap: wrap;
 }
+
+.abd-btn{
+  width: 48px;
+  height: 38px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.06);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  touch-action: manipulation;
+}
+.abd-btn.selected{
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.abd-icon{
+  display:block;
+  width: 18px;
+  height: 22px;
+  position: relative;
+}
+
+/* abdomen shape: oval body + tiny head nub */
+.abd-icon::before{
+  content:"";
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform: translate(-50%, -45%);
+  width: 14px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--abd);
+  opacity: .92;
+}
+.abd-icon::after{
+  content:"";
+  position:absolute;
+  left:50%;
+  top: 6px;
+  transform: translateX(-50%);
+  width: 6px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--abd);
+  opacity: .92;
+}
+
+/* size scaling */
+.abd-1::before{ width:10px; height:14px; }
+.abd-2::before{ width:12px; height:16px; }
+.abd-3::before{ width:14px; height:18px; }
+.abd-4::before{ width:16px; height:20px; }
+.abd-5::before{ width:18px; height:22px; }

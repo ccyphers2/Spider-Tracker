@@ -2,51 +2,94 @@
 {% block content %}
 
 <div class="card">
-  <div class="page-head">
-    <a class="btn-outline" href="{{ back }}">← Back</a>
-    <div class="page-head-mid">
-      <div class="page-title">Day Summary</div>
+  <div class="editor-head">
+    <div>
+      <div class="editor-kicker">{{ batch_name }}</div>
+      <div class="editor-title">Day Summary</div>
       <div class="subtle" style="margin-top:6px;">
         <span class="date-pill">{{ pretty_day }}</span>
       </div>
-      <div class="subtle" style="margin-top:8px;">Batch: <b>{{ batch["name"] }}</b></div>
+    </div>
+    <div class="editor-actions">
+      <a class="btn-outline" href="{{ url_for('calendar_view') }}">Back</a>
     </div>
   </div>
 </div>
 
-<div class="card pad-bottom-safe">
+<div class="card">
   <div class="sum-block">
     <div class="label">Fed</div>
-    <div class="sum-line">{{ fed|join(", ") if fed else "—" }}</div>
+    <div class="sum-line" id="sumFed">—</div>
   </div>
 
   <div class="sum-block">
     <div class="label">Ate</div>
-    <div class="sum-line">{{ ate|join(", ") if ate else "—" }}</div>
+    <div class="sum-line" id="sumAte">—</div>
   </div>
 
   <div class="sum-block">
     <div class="label">Watered</div>
-    <div class="sum-line">{{ watered|join(", ") if watered else "—" }}</div>
+    <div class="sum-line" id="sumWatered">—</div>
   </div>
 
   <div class="sum-block">
     <div class="label">Molting</div>
-    <div class="sum-line">{{ molting|join(", ") if molting else "—" }}</div>
+    <div class="sum-line" id="sumMolting">—</div>
   </div>
 
   <div class="sum-block">
     <div class="label">Abdomen size</div>
-    <div class="sum-booty">
-      {% for k in [1,2,3,4,5] %}
-        <div class="sum-booty-row">
-          <div class="sum-booty-k">Size {{ k }}</div>
-          <div class="sum-booty-v">{{ booty[k]|join(", ") if booty[k] else "—" }}</div>
-        </div>
-      {% endfor %}
-    </div>
+    <div class="sum-booty" id="sumBooty"></div>
     <div class="hint">Grouped by size (1–5)</div>
   </div>
 </div>
+
+<script>
+(function(){
+  function fmtList(arr){
+    if(!arr || arr.length === 0) return "—";
+    return arr.join(", ");
+  }
+
+  function setText(id, txt){
+    const el = document.getElementById(id);
+    if(el) el.textContent = txt;
+  }
+
+  function renderBooty(bootyObj){
+    const box = document.getElementById("sumBooty");
+    if(!box) return;
+    box.innerHTML = "";
+
+    const keys = ["1","2","3","4","5"];
+    keys.forEach(k=>{
+      const row = document.createElement("div");
+      row.className = "sum-booty-row";
+      row.innerHTML = `<div class="sum-booty-k">Size ${k}</div><div class="sum-booty-v">${fmtList(bootyObj[k] || [])}</div>`;
+      box.appendChild(row);
+    });
+  }
+
+  async function load(){
+    const batchId = {{ batch_id }};
+    const dayStr = "{{ day }}";
+    const res = await fetch(`/day_summary/${batchId}/${dayStr}`);
+    if(!res.ok){
+      alert("Summary failed");
+      return;
+    }
+    const data = await res.json();
+    if(!data.ok) return;
+
+    setText("sumFed", fmtList(data.fed));
+    setText("sumAte", fmtList(data.ate));
+    setText("sumWatered", fmtList(data.watered));
+    setText("sumMolting", fmtList(data.molting));
+    renderBooty(data.booty || {});
+  }
+
+  load();
+})();
+</script>
 
 {% endblock %}

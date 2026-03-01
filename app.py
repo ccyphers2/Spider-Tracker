@@ -136,13 +136,6 @@ def _pretty_day(day_str: str) -> str:
     return d.strftime("%a, %b %d, %Y")
 
 
-def _validate_day_or_404(day: str):
-    try:
-        datetime.strptime(day, "%Y-%m-%d")
-    except:
-        abort(404)
-
-
 @app.route("/")
 def home():
     return redirect(url_for("batches"))
@@ -231,7 +224,10 @@ def batch_view(batch_id: int):
 
 @app.route("/batch/<int:batch_id>/<day>")
 def batch_view_day(batch_id: int, day: str):
-    _validate_day_or_404(day)
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        abort(404)
 
     session["last_batch"] = batch_id
 
@@ -265,9 +261,6 @@ def batch_view_day(batch_id: int, day: str):
     log_map = {r["spider_id"]: r for r in logs}
     highlight_map = {r["spider_id"]: (r["color"] or "") for r in hl_rows}
 
-    # used so the editor page can go back to the exact day grid
-    back_url = url_for("batch_view_day", batch_id=batch_id, day=day)
-
     return render_template(
         "batch_view.html",
         batch=batch,
@@ -279,55 +272,69 @@ def batch_view_day(batch_id: int, day: str):
         log_map=log_map,
         highlight_map=highlight_map,
         color_options=COLOR_OPTIONS,
-        last_fed_color=(batch["last_fed_color"] or ""),
-        back_url=back_url
+        last_fed_color=(batch["last_fed_color"] or "")
     )
 
 
-# ---------- SPIDER EDIT PAGE (NEW) ----------
+# ---------- SPIDER EDIT PAGE (separate page, fixes scroll issues) ----------
 
 @app.route("/spider/<int:spider_id>/<day>", methods=["GET"])
 def spider_edit(spider_id: int, day: str):
-    _validate_day_or_404(day)
-
-    back = (request.args.get("back") or "").strip()
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        abort(404)
 
     with connect() as conn:
         spider = conn.execute("SELECT * FROM spiders WHERE id=?", (spider_id,)).fetchone()
         if not spider:
             abort(404)
 
-        batch = conn.execute("SELECT * FROM batches WHERE id=?", (spider["batch_id"],)).fetchone()
+        batch_id = spider["batch_id"]
+        batch = conn.execute("SELECT * FROM batches WHERE id=?", (batch_id,)).fetchone()
         if not batch:
             abort(404)
 
+        # order list for swipe nav
+        all_spiders = conn.execute(
+            "SELECT id, number, name FROM spiders WHERE batch_id=? ORDER BY number ASC",
+            (batch_id,)
+        ).fetchall()
+        ids = [r["id"] for r in all_spiders]
+        try:
+            idx = ids.index(spider_id)
+        except:
+            idx = 0
+
+        prev_id = ids[idx - 1] if idx - 1 >= 0 else None
+        next_id = ids[idx + 1] if idx + 1 < len(ids) else None
+
         log = conn.execute("""
-            SELECT spider_id, fed, ate, watered, molting, molts_count, notes, booty
+            SELECT fed, ate, watered, molting, molts_count, notes, booty
             FROM spiderlog
             WHERE spider_id=? AND day=?
         """, (spider_id, day)).fetchone()
 
-    # default back to the spider’s batch/day grid if not provided
-    if not back:
-        back = url_for("batch_view_day", batch_id=spider["batch_id"], day=day)
-
-    booty = 3
-    if log and log["booty"] is not None:
-        try:
-            booty = int(log["booty"])
-        except:
-            booty = 3
-    booty = max(1, min(5, booty))
+    if not log:
+        log = {
+            "fed": "no",
+            "ate": "no",
+            "watered": "no",
+            "molting": "no",
+            "molts_count": 0,
+            "notes": "",
+            "booty": 3
+        }
 
     return render_template(
         "spider_edit.html",
-        spider=spider,
         batch=batch,
+        spider=spider,
         day=day,
         pretty_day=_pretty_day(day),
-        log=log,
-        booty=booty,
-        back=back
+        prev_id=prev_id,
+        next_id=next_id,
+        log=log
     )
 
 
@@ -375,7 +382,10 @@ def set_spider_name():
 
 @app.route("/spiderlog/<int:spider_id>/<day>", methods=["POST"])
 def save_spiderlog(spider_id: int, day: str):
-    _validate_day_or_404(day)
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        abort(404)
 
     fed = request.form.get("fed", "no")
     ate = request.form.get("ate", "no")
@@ -415,14 +425,18 @@ def save_spiderlog(spider_id: int, day: str):
 
         conn.commit()
 
-    return redirect(url_for("batch_view_day", batch_id=batch_id, day=day))
+    # return to spider editor (not grid) for a smooth workflow
+    return redirect(url_for("spider_edit", spider_id=spider_id, day=day))
 
 
 # ---------- BULK APPLY ----------
 
 @app.route("/bulk_apply/<int:batch_id>/<day>", methods=["POST"])
 def bulk_apply(batch_id: int, day: str):
-    _validate_day_or_404(day)
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        return ("bad day", 400)
 
     data = request.get_json(silent=True) or {}
     spider_ids = data.get("spider_ids") or []
@@ -568,20 +582,16 @@ def calendar_view(year=None, month=None):
     )
 
 
-# ---------- DAY SUMMARY PAGE (NEW) ----------
+# ---------- DAY SUMMARY (json) + PAGE ----------
 
-@app.route("/summary/<int:batch_id>/<day>")
-def day_summary_page(batch_id: int, day: str):
-    _validate_day_or_404(day)
-    back = (request.args.get("back") or "").strip()
-    if not back:
-        back = url_for("calendar_view")
+@app.route("/day_summary/<int:batch_id>/<day>")
+def day_summary(batch_id: int, day: str):
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        return ("bad day", 400)
 
     with connect() as conn:
-        batch = conn.execute("SELECT * FROM batches WHERE id=?", (batch_id,)).fetchone()
-        if not batch:
-            abort(404)
-
         rows = conn.execute("""
             SELECT s.number, s.name,
                    l.fed, l.ate, l.watered, l.molting, l.booty
@@ -616,17 +626,43 @@ def day_summary_page(batch_id: int, day: str):
         b = max(1, min(5, b))
         booty_groups[b].append(num)
 
+    return jsonify({
+        "ok": True,
+        "day": day,
+        "pretty_day": _pretty_day(day),
+        "fed": fed_yes,
+        "ate": ate_yes,
+        "watered": watered_yes,
+        "molting": molting_yes,
+        "booty": {
+            "1": booty_groups[1],
+            "2": booty_groups[2],
+            "3": booty_groups[3],
+            "4": booty_groups[4],
+            "5": booty_groups[5],
+        }
+    })
+
+
+@app.route("/day/<int:batch_id>/<day>")
+def day_summary_page(batch_id: int, day: str):
+    try:
+        datetime.strptime(day, "%Y-%m-%d")
+    except:
+        abort(404)
+
+    # pull summary using same logic but server-side for a clean page
+    with connect() as conn:
+        batch = conn.execute("SELECT * FROM batches WHERE id=?", (batch_id,)).fetchone()
+        if not batch:
+            abort(404)
+
     return render_template(
         "day_summary.html",
-        batch=batch,
+        batch_id=batch_id,
+        batch_name=batch["name"],
         day=day,
-        pretty_day=_pretty_day(day),
-        back=back,
-        fed=fed_yes,
-        ate=ate_yes,
-        watered=watered_yes,
-        molting=molting_yes,
-        booty=booty_groups
+        pretty_day=_pretty_day(day)
     )
 
 

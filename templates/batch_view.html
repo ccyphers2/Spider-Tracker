@@ -50,7 +50,6 @@
         <button class="btn" type="button" onclick="openBulk()">Edit</button>
       </div>
     </div>
-
   </div>
 
   <div id="palette" class="palette hidden">
@@ -70,30 +69,32 @@
       {% set hc = highlight_map.get(spider["id"], '') %}
       {% set sname = (spider["name"] or "") %}
 
-      <button class="spider-card"
-              data-spider-id="{{ spider['id'] }}"
-              data-spider-number="{{ spider['number'] }}"
-              data-spider-name="{{ sname|e }}"
-              onclick="chipClick(event, {{ spider['id'] }})"
-              {% if hc %} style="background: {{ hc }}; border-color: {{ hc }}; color:#fff;" {% endif %}>
+      <a class="spider-card spider-link"
+         href="{{ url_for('spider_edit', spider_id=spider['id'], day=day) }}"
+         data-spider-id="{{ spider['id'] }}"
+         data-spider-number="{{ spider['number'] }}"
+         data-spider-name="{{ sname|e }}"
+         onclick="chipClick(event, {{ spider['id'] }})"
+         {% if hc %} style="background: {{ hc }}; border-color: {{ hc }}; color:#fff;" {% endif %}>
+
         <div class="card-num">#{{ spider["number"] }}</div>
         <div class="card-main">
           <div class="card-center-name">{% if sname %}{{ sname }}{% else %}&nbsp;{% endif %}</div>
           <div class="card-center-num">#{{ spider["number"] }}</div>
         </div>
-      </button>
+      </a>
     {% endfor %}
   </div>
 </div>
 
-<!-- Bulk Apply Dialog (kept as-is) -->
+<!-- Bulk Apply Dialog -->
 <dialog class="day-dialog" id="bulkDlg">
   <div class="day-dialog-header">
     <div>
       <div class="day-dialog-date">Apply to selected spiders</div>
       <div class="day-dialog-status">{{ pretty_day }}</div>
     </div>
-    <button class="day-dialog-close" type="button" onclick="document.getElementById('bulkDlg').close()">✕</button>
+    <button class="day-dialog-close" type="button" onclick="closeBulk()">✕</button>
   </div>
 
   <div class="day-dialog-body">
@@ -133,8 +134,8 @@
       <div class="label">Abdomen size</div>
       <div class="booty-row" id="bulkBootyRow">
         {% for n in [1,2,3,4,5] %}
-          <button type="button" class="booty-btn booty-{{n}} {% if n==3 %}selected{% endif %}"
-                  onclick="setBulkBooty({{n}})"></button>
+          <button type="button" class="abd-btn {% if n==3 %}selected{% endif %}" data-val="{{n}}"
+                  onclick="setBulkBooty({{n}})"><span class="abd-icon abd-{{n}}"></span></button>
         {% endfor %}
       </div>
       <div class="hint">1 = skinny, 5 = very full</div>
@@ -152,7 +153,7 @@
   </div>
 
   <div class="day-dialog-actions">
-    <button class="btn-outline" type="button" onclick="document.getElementById('bulkDlg').close()">Back</button>
+    <button class="btn-outline" type="button" onclick="closeBulk()">Back</button>
     <button class="btn" type="button" onclick="applyBulk()">Apply</button>
   </div>
 </dialog>
@@ -170,7 +171,8 @@
   let showNames = (localStorage.getItem("showNames") ?? "1") === "1";
 
   // --- Spider ordering ---
-  const spiderIds = Array.from(document.querySelectorAll(".spider-card")).map(x => Number(x.dataset.spiderId));
+  const spiderIds = Array.from(document.querySelectorAll(".spider-link"))
+    .map(x => Number(x.dataset.spiderId));
 
   function applyNameVisibility(){
     document.body.classList.toggle("hide-names", !showNames);
@@ -221,7 +223,7 @@
 
   function refreshSelectedUI(){
     document.getElementById("selCount").textContent = String(selected.size);
-    document.querySelectorAll(".spider-card").forEach(btn => {
+    document.querySelectorAll(".spider-link").forEach(btn => {
       const id = Number(btn.dataset.spiderId);
       btn.classList.toggle("selected-chip", selected.has(id));
     });
@@ -233,7 +235,9 @@
   }
 
   async function chipClick(evt, spiderId){
-    evt.preventDefault();
+    if(selectMode || highlightMode){
+      evt.preventDefault();
+    }
 
     if(selectMode){
       if(selected.has(spiderId)) selected.delete(spiderId);
@@ -249,7 +253,7 @@
 
       const res = await fetch("/set_highlight", { method: "POST", body: fd });
       if(res.ok){
-        const btn = document.querySelector(`.spider-card[data-spider-id="${spiderId}"]`);
+        const btn = document.querySelector(`.spider-link[data-spider-id="${spiderId}"]`);
         if(currentColor){
           btn.style.background = currentColor;
           btn.style.borderColor = currentColor;
@@ -262,10 +266,7 @@
       }
       return;
     }
-
-    // NEW: open full editor page (no dialog)
-    const back = encodeURIComponent("{{ back_url }}");
-    window.location.href = `/spider/${spiderId}/{{ day }}?back=${back}`;
+    // normal click follows link to editor page
   }
 
   function toggleLastFed(){
@@ -285,7 +286,7 @@
     }
   }
 
-  // --- Bulk apply (unchanged) ---
+  // --- Bulk apply ---
   let bulkBooty = 3;
 
   function openBulk(){
@@ -293,14 +294,20 @@
       alert("Select at least 1 spider.");
       return;
     }
+    document.body.classList.add("modal-open");
     document.getElementById("bulkDlg").showModal();
+  }
+  function closeBulk(){
+    const dlg = document.getElementById("bulkDlg");
+    if(dlg) dlg.close();
+    document.body.classList.remove("modal-open");
   }
 
   function setBulkBooty(n){
     bulkBooty = n;
     const row = document.getElementById("bulkBootyRow");
-    row.querySelectorAll(".booty-btn").forEach(b => b.classList.remove("selected"));
-    row.querySelector(".booty-" + n).classList.add("selected");
+    row.querySelectorAll(".abd-btn").forEach(b => b.classList.remove("selected"));
+    row.querySelector(`.abd-btn[data-val="${n}"]`).classList.add("selected");
   }
 
   function _getBulkRadio(name){
@@ -332,37 +339,10 @@
       return;
     }
 
-    document.getElementById("bulkDlg").close();
+    closeBulk();
     toggleSelectMode();
     location.reload();
   }
-
-  // ---- OPTIONAL: swipe day navigation (page-level) ----
-  (function(){
-    let sx=0, sy=0, active=false;
-    document.addEventListener("touchstart", (e)=>{
-      if(!e.touches || e.touches.length!==1) return;
-      // ignore if a dialog is open (bulk)
-      if(document.querySelector("dialog[open]")) return;
-      active=true;
-      sx=e.touches[0].clientX; sy=e.touches[0].clientY;
-    }, {passive:true});
-
-    document.addEventListener("touchend", (e)=>{
-      if(!active) return;
-      active=false;
-      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
-      if(!t) return;
-
-      const dx=t.clientX-sx;
-      const dy=t.clientY-sy;
-      if(Math.abs(dx) < 90) return;
-      if(Math.abs(dy) > 100) return;
-
-      if(dx < 0) window.location.href = "{{ url_for('batch_view_day', batch_id=batch['id'], day=next_day) }}";
-      else window.location.href = "{{ url_for('batch_view_day', batch_id=batch['id'], day=prev_day) }}";
-    }, {passive:true});
-  })();
 </script>
 
 {% endblock %}

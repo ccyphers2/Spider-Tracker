@@ -2,71 +2,73 @@
 {% block content %}
 
 <div class="card">
-  <div class="page-head">
-    <a class="btn-outline" href="{{ back }}">← Back</a>
-    <div class="page-head-mid">
-      <div class="page-title">Spider #{{ spider["number"] }}{% if spider["name"] %} — {{ spider["name"] }}{% endif %}</div>
+  <div class="editor-head">
+    <div>
+      <div class="editor-kicker">{{ batch["name"] }}</div>
+      <div class="editor-title">
+        Spider #{{ spider["number"] }}{% if spider["name"] %} — {{ spider["name"] }}{% endif %}
+      </div>
       <div class="subtle" style="margin-top:6px;">
         <span class="date-pill">{{ pretty_day }}</span>
       </div>
     </div>
+
+    <div class="editor-actions">
+      <a class="btn-outline" href="{{ url_for('batch_view_day', batch_id=batch['id'], day=day) }}">Back</a>
+    </div>
   </div>
 </div>
 
-<div class="card pad-bottom-safe">
-  <div class="label" style="margin:0 0 8px 0;">Spider name (optional)</div>
-  <div class="name-row">
-    <input class="input name-input" id="name{{ spider['id'] }}" type="text" maxlength="40"
-           placeholder="(leave blank for number only)"
-           value="{{ spider['name'] or '' }}">
-    <button class="btn-outline name-save" type="button" onclick="saveName({{ spider['id'] }}, {{ spider['number'] }})">Save</button>
-  </div>
-  <div class="hint" id="nameHint{{ spider['id'] }}" style="display:none;">Saved ✅</div>
+<div class="card editor-card">
+  <div class="editor-nav">
+    {% if prev_id %}
+      <a class="btn-outline" id="prevBtn" href="{{ url_for('spider_edit', spider_id=prev_id, day=day) }}">‹ Prev</a>
+    {% else %}
+      <span class="btn-outline disabled">‹ Prev</span>
+    {% endif %}
 
-  <hr class="soft-rule">
+    {% if next_id %}
+      <a class="btn-outline" id="nextBtn" href="{{ url_for('spider_edit', spider_id=next_id, day=day) }}">Next ›</a>
+    {% else %}
+      <span class="btn-outline disabled">Next ›</span>
+    {% endif %}
+  </div>
+
+  <div class="name-edit" style="padding:0; margin-top:14px;">
+    <div class="label" style="margin: 0 0 8px 0;">Spider name (optional)</div>
+    <div class="name-row">
+      <input class="input name-input" id="nameInput" type="text" maxlength="40"
+             placeholder="(leave blank for number only)"
+             value="{{ spider['name'] or '' }}">
+      <button class="btn-outline name-save" type="button" onclick="saveName({{ spider['id'] }})">Save</button>
+    </div>
+    <div class="hint" id="nameHint" style="display:none;">Saved ✅</div>
+  </div>
 
   <form method="post" action="/spiderlog/{{ spider['id'] }}/{{ day }}">
-    <input type="hidden" name="booty" value="{{ booty }}" id="bootyInput">
+    <input type="hidden" name="booty" id="bootyInput" value="{{ log['booty'] if log else 3 }}">
 
     <div class="field">
       <div class="label">Fed</div>
       <div class="seg">
-        <label class="seg-item">
-          <input type="radio" name="fed" value="yes" {% if log and log["fed"]=="yes" %}checked{% endif %}>
-          <span>Yes</span>
-        </label>
-        <label class="seg-item">
-          <input type="radio" name="fed" value="no" {% if not log or log["fed"]!="yes" %}checked{% endif %}>
-          <span>No</span>
-        </label>
+        <label class="seg-item"><input type="radio" name="fed" value="yes" {% if log and log["fed"]=="yes" %}checked{% endif %}><span>Yes</span></label>
+        <label class="seg-item"><input type="radio" name="fed" value="no"  {% if not log or log["fed"]!="yes" %}checked{% endif %}><span>No</span></label>
       </div>
     </div>
 
     <div class="field">
       <div class="label">Ate</div>
       <div class="seg">
-        <label class="seg-item">
-          <input type="radio" name="ate" value="yes" {% if log and log["ate"]=="yes" %}checked{% endif %}>
-          <span>Yes</span>
-        </label>
-        <label class="seg-item">
-          <input type="radio" name="ate" value="no" {% if not log or log["ate"]!="yes" %}checked{% endif %}>
-          <span>No</span>
-        </label>
+        <label class="seg-item"><input type="radio" name="ate" value="yes" {% if log and log["ate"]=="yes" %}checked{% endif %}><span>Yes</span></label>
+        <label class="seg-item"><input type="radio" name="ate" value="no"  {% if not log or log["ate"]!="yes" %}checked{% endif %}><span>No</span></label>
       </div>
     </div>
 
     <div class="field">
       <div class="label">Watered</div>
       <div class="seg">
-        <label class="seg-item">
-          <input type="radio" name="watered" value="yes" {% if log and log["watered"]=="yes" %}checked{% endif %}>
-          <span>Yes</span>
-        </label>
-        <label class="seg-item">
-          <input type="radio" name="watered" value="no" {% if not log or log["watered"]!="yes" %}checked{% endif %}>
-          <span>No</span>
-        </label>
+        <label class="seg-item"><input type="radio" name="watered" value="yes" {% if log and log["watered"]=="yes" %}checked{% endif %}><span>Yes</span></label>
+        <label class="seg-item"><input type="radio" name="watered" value="no"  {% if not log or log["watered"]!="yes" %}checked{% endif %}><span>No</span></label>
       </div>
       <div class="hint">Defaults to No unless you set Yes for this day.</div>
     </div>
@@ -74,24 +76,20 @@
     <div class="field">
       <div class="label">Molting</div>
       <div class="seg">
-        <label class="seg-item">
-          <input type="radio" name="molting" value="yes" {% if log and log["molting"]=="yes" %}checked{% endif %}>
-          <span>Yes</span>
-        </label>
-        <label class="seg-item">
-          <input type="radio" name="molting" value="no" {% if not log or log["molting"]!="yes" %}checked{% endif %}>
-          <span>No</span>
-        </label>
+        <label class="seg-item"><input type="radio" name="molting" value="yes" {% if log and log["molting"]=="yes" %}checked{% endif %}><span>Yes</span></label>
+        <label class="seg-item"><input type="radio" name="molting" value="no"  {% if not log or log["molting"]!="yes" %}checked{% endif %}><span>No</span></label>
       </div>
     </div>
 
     <div class="field">
       <div class="label">Abdomen size</div>
-      <div class="booty-row" id="bootyRow" data-selected="{{ booty }}">
+      <div class="booty-row" id="abdRow">
+        {% set b = (log["booty"] if log else 3) %}
         {% for n in [1,2,3,4,5] %}
-          <button type="button"
-                  class="booty-btn booty-{{n}} {% if booty==n %}selected{% endif %}"
-                  onclick="selectBooty({{n}})"></button>
+          <button type="button" class="abd-btn {% if b==n %}selected{% endif %}" data-val="{{n}}"
+                  onclick="setBooty({{n}})">
+            <span class="abd-icon abd-{{n}}"></span>
+          </button>
         {% endfor %}
       </div>
       <div class="hint">1 = skinny, 5 = very full</div>
@@ -107,25 +105,15 @@
       <textarea class="notes" name="notes">{{ (log['notes'] if log else '') }}</textarea>
     </div>
 
-    <div class="sticky-actions">
-      <a class="btn-outline" href="{{ back }}">Done</a>
+    <div class="editor-savebar">
       <button class="btn" type="submit">Save</button>
     </div>
   </form>
 </div>
 
 <script>
-  function selectBooty(val){
-    const input = document.getElementById("bootyInput");
-    input.value = String(val);
-
-    const row = document.getElementById("bootyRow");
-    row.querySelectorAll(".booty-btn").forEach(b => b.classList.remove("selected"));
-    row.querySelector(".booty-" + val).classList.add("selected");
-  }
-
-  async function saveName(spiderId, number){
-    const input = document.getElementById("name" + spiderId);
+  async function saveName(spiderId){
+    const input = document.getElementById("nameInput");
     const name = (input.value || "").trim();
 
     const res = await fetch("/set_spider_name", {
@@ -139,21 +127,59 @@
       return;
     }
 
-    const data = await res.json();
-    const newName = data.name || "";
+    const hint = document.getElementById("nameHint");
+    hint.style.display = "block";
+    setTimeout(() => { hint.style.display = "none"; }, 900);
 
-    // Update the title on this page
-    const titleEl = document.querySelector(".page-title");
-    if(titleEl){
-      titleEl.textContent = newName ? `Spider #${number} — ${newName}` : `Spider #${number}`;
-    }
-
-    const hint = document.getElementById("nameHint" + spiderId);
-    if(hint){
-      hint.style.display = "block";
-      setTimeout(() => { hint.style.display = "none"; }, 900);
-    }
+    // Update title without reload
+    const title = document.querySelector(".editor-title");
+    const number = {{ spider["number"] }};
+    title.textContent = name ? `Spider #${number} — ${name}` : `Spider #${number}`;
   }
+
+  function setBooty(n){
+    document.getElementById("bootyInput").value = String(n);
+    document.querySelectorAll("#abdRow .abd-btn").forEach(b => b.classList.remove("selected"));
+    document.querySelector(`#abdRow .abd-btn[data-val="${n}"]`).classList.add("selected");
+  }
+
+  // Tinder swipe (left/right to move spiders)
+  (function(){
+    let sx=0, sy=0, active=false;
+
+    document.addEventListener("touchstart", (e)=>{
+      if(!e.touches || e.touches.length!==1) return;
+
+      // don't swipe when touching inputs/textarea/buttons
+      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
+      if(tag === "input" || tag === "textarea" || tag === "button" || tag === "label") return;
+
+      active=true;
+      sx=e.touches[0].clientX;
+      sy=e.touches[0].clientY;
+    }, {passive:true});
+
+    document.addEventListener("touchend", (e)=>{
+      if(!active) return;
+      active=false;
+
+      const t = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
+      if(!t) return;
+
+      const dx=t.clientX-sx;
+      const dy=t.clientY-sy;
+
+      // horizontal swipe threshold
+      if(Math.abs(dx) < 70) return;
+      if(Math.abs(dy) > 120) return;
+
+      const prev = document.getElementById("prevBtn");
+      const next = document.getElementById("nextBtn");
+
+      if(dx < 0 && next) window.location.href = next.href;   // swipe left -> next
+      if(dx > 0 && prev) window.location.href = prev.href;   // swipe right -> prev
+    }, {passive:true});
+  })();
 </script>
 
 {% endblock %}

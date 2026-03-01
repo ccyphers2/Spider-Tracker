@@ -25,20 +25,19 @@
         {% set dstr = d.isoformat() %}
         {% set in_month = (d.month == month) %}
         {% set has_data = (dstr in has_data_days) %}
-
-        <button type="button"
-                class="cal-day-btn cal-day
+        <a class="cal-day
                   {% if not in_month %}muted{% endif %}
                   {% if dstr == today.isoformat() %}today{% endif %}
                   {% if has_data %}has-data{% endif %}"
-                data-day="{{ dstr }}"
-                data-open="{{ url_for('batch_view_day', batch_id=batch_id, day=dstr) }}"
-                data-sum="{{ url_for('day_summary_page', batch_id=batch_id, day=dstr, back=url_for('calendar_view', year=year, month=month)) }}">
+           href="{{ url_for('batch_view_day', batch_id=batch_id, day=dstr) }}"
+           data-day="{{ dstr }}"
+           data-batch="{{ batch_id or 0 }}">
           <div class="cal-day-num">{{ d.day }}</div>
+
           {% if has_data %}
             <div class="cal-marker" title="Has data">🕷</div>
           {% endif %}
-        </button>
+        </a>
       {% endfor %}
     {% endfor %}
   </div>
@@ -52,24 +51,18 @@
   let holdTimer = null;
   let holding = false;
 
-  // kill iOS callout/selection behavior as much as possible
-  document.querySelectorAll(".cal-day-btn").forEach(btn => {
-    btn.addEventListener("contextmenu", (e)=> e.preventDefault());
-  });
-
-  function go(url){
-    window.location.href = url;
-  }
-
-  document.querySelectorAll(".cal-day-btn[data-day]").forEach(btn=>{
-    const openUrl = btn.dataset.open;
-    const sumUrl  = btn.dataset.sum;
+  document.querySelectorAll(".cal-day[data-day]").forEach(a=>{
+    const dayStr = a.dataset.day;
 
     const startHold = (e)=>{
       holding = false;
+
+      // stop iOS/Android "link preview"
+      e.preventDefault();
+
       holdTimer = setTimeout(()=>{
         holding = true;
-        go(sumUrl);
+        window.location.href = `/day/${batchId}/${dayStr}`;
       }, 450);
     };
 
@@ -78,28 +71,21 @@
       holdTimer = null;
     };
 
-    // Tap -> open day
-    btn.addEventListener("click", ()=>{
-      if(holding) return;
-      go(openUrl);
-    });
-
-    // Long press -> summary page
-    btn.addEventListener("touchstart", startHold, {passive:true});
-    btn.addEventListener("touchend", (e)=>{
+    a.addEventListener("touchstart", startHold, {passive:false});
+    a.addEventListener("touchend", (e)=>{
       cancelHold();
       if(holding){
         e.preventDefault();
         e.stopPropagation();
       }
     }, {passive:false});
-    btn.addEventListener("touchmove", cancelHold, {passive:true});
-    btn.addEventListener("touchcancel", cancelHold, {passive:true});
+    a.addEventListener("touchmove", cancelHold, {passive:true});
+    a.addEventListener("touchcancel", cancelHold, {passive:true});
 
-    // Desktop hold
-    btn.addEventListener("mousedown", startHold);
-    btn.addEventListener("mouseup", cancelHold);
-    btn.addEventListener("mouseleave", cancelHold);
+    // desktop mouse hold
+    a.addEventListener("mousedown", startHold);
+    a.addEventListener("mouseup", cancelHold);
+    a.addEventListener("mouseleave", cancelHold);
   });
 })();
 </script>
