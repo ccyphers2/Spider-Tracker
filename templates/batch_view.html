@@ -82,111 +82,11 @@
           <div class="card-center-num">#{{ spider["number"] }}</div>
         </div>
       </button>
-
-      {% set log = log_map.get(spider["id"]) %}
-      {% set booty = (log["booty"] if log else 3) %}
-
-      <dialog class="day-dialog day-dialog-full" id="dlg{{ spider['id'] }}">
-        <div class="day-dialog-header">
-          <div>
-            <div class="day-dialog-date">
-              <span id="dlgTitle{{ spider['id'] }}">Spider #{{ spider["number"] }}{% if sname %} — {{ sname }}{% endif %}</span>
-            </div>
-            <div class="day-dialog-status">{{ pretty_day }}</div>
-          </div>
-
-          <div class="dialog-nav">
-            <button class="nav-btn" type="button" onclick="navSpider(-1, {{ spider['id'] }})">‹</button>
-            <button class="nav-btn" type="button" onclick="navSpider(1, {{ spider['id'] }})">›</button>
-            <button class="day-dialog-close" type="button"
-                    onclick="document.getElementById('dlg{{ spider['id'] }}').close()">✕</button>
-          </div>
-        </div>
-
-        <div class="name-edit">
-          <div class="label" style="margin: 0 0 8px 0;">Spider name (optional)</div>
-          <div class="name-row">
-            <input class="input name-input" id="name{{ spider['id'] }}" type="text" maxlength="40"
-                   placeholder="(leave blank for number only)"
-                   value="{{ sname }}">
-            <button class="btn-outline name-save" type="button" onclick="saveName({{ spider['id'] }})">Save</button>
-          </div>
-          <div class="hint" id="nameHint{{ spider['id'] }}" style="display:none;">Saved ✅</div>
-        </div>
-
-        <form method="post" action="/spiderlog/{{ spider['id'] }}/{{ day }}">
-          <div class="day-dialog-body">
-            <input type="hidden" name="booty" value="{{ booty }}" class="booty-input">
-
-            <div class="field">
-              <div class="label">Fed</div>
-              <div class="seg">
-                <label class="seg-item"><input type="radio" name="fed" value="yes" {% if log and log["fed"]=="yes" %}checked{% endif %}><span>Yes</span></label>
-                <label class="seg-item"><input type="radio" name="fed" value="no"  {% if not log or log["fed"]!="yes" %}checked{% endif %}><span>No</span></label>
-              </div>
-            </div>
-
-            <div class="field">
-              <div class="label">Ate</div>
-              <div class="seg">
-                <label class="seg-item"><input type="radio" name="ate" value="yes" {% if log and log["ate"]=="yes" %}checked{% endif %}><span>Yes</span></label>
-                <label class="seg-item"><input type="radio" name="ate" value="no"  {% if not log or log["ate"]!="yes" %}checked{% endif %}><span>No</span></label>
-              </div>
-            </div>
-
-            <div class="field">
-              <div class="label">Watered</div>
-              <div class="seg">
-                <label class="seg-item"><input type="radio" name="watered" value="yes" {% if log and log["watered"]=="yes" %}checked{% endif %}><span>Yes</span></label>
-                <label class="seg-item"><input type="radio" name="watered" value="no"  {% if not log or log["watered"]!="yes" %}checked{% endif %}><span>No</span></label>
-              </div>
-              <div class="hint">Defaults to No unless you set Yes for this day.</div>
-            </div>
-
-            <div class="field">
-              <div class="label">Molting</div>
-              <div class="seg">
-                <label class="seg-item"><input type="radio" name="molting" value="yes" {% if log and log["molting"]=="yes" %}checked{% endif %}><span>Yes</span></label>
-                <label class="seg-item"><input type="radio" name="molting" value="no"  {% if not log or log["molting"]!="yes" %}checked{% endif %}><span>No</span></label>
-              </div>
-            </div>
-
-            <div class="field">
-              <div class="label">Abdomen size</div>
-              <div class="booty-row" data-selected="{{ booty }}">
-                {% for n in [1,2,3,4,5] %}
-                  <button type="button" class="booty-btn booty-{{n}} {% if booty==n %}selected{% endif %}"
-                          onclick="selectBooty(this, {{n}})"></button>
-                {% endfor %}
-              </div>
-              <div class="hint">1 = skinny, 5 = very full</div>
-            </div>
-
-            <div class="field">
-              <div class="label">Number of molts</div>
-              <input class="input" type="number" min="0" name="molts_count" value="{{ (log['molts_count'] if log else 0) }}">
-            </div>
-
-            <div class="field">
-              <div class="label">Notes</div>
-              <textarea class="notes" name="notes">{{ (log['notes'] if log else '') }}</textarea>
-            </div>
-
-          </div>
-
-          <div class="day-dialog-actions">
-            <button class="btn-outline" type="button"
-                    onclick="document.getElementById('dlg{{ spider['id'] }}').close()">Done</button>
-            <button class="btn" type="submit">Save</button>
-          </div>
-        </form>
-      </dialog>
-
     {% endfor %}
   </div>
 </div>
 
-<!-- Bulk Apply Dialog -->
+<!-- Bulk Apply Dialog (kept as-is) -->
 <dialog class="day-dialog" id="bulkDlg">
   <div class="day-dialog-header">
     <div>
@@ -258,30 +158,6 @@
 </dialog>
 
 <script>
-  // ---------------- SCROLL LOCK (iOS BACKGROUND SCROLL FIX) ----------------
-  let __scrollY = 0;
-
-  function lockScroll(){
-    if(document.body.classList.contains("scroll-locked")) return;
-    __scrollY = window.scrollY || document.documentElement.scrollTop || 0;
-    document.body.style.top = `-${__scrollY}px`;
-    document.body.classList.add("scroll-locked");
-  }
-
-  function unlockScroll(){
-    if(!document.body.classList.contains("scroll-locked")) return;
-    document.body.classList.remove("scroll-locked");
-    document.body.style.top = "";
-    window.scrollTo(0, __scrollY);
-  }
-
-  // If ANY dialog closes, unlock (covers X button, ESC, programmatic close)
-  document.querySelectorAll("dialog").forEach(d=>{
-    d.addEventListener("close", ()=>{
-      if(!document.querySelector("dialog[open]")) unlockScroll();
-    });
-  });
-
   // --- Highlight mode ---
   let highlightMode = false;
   let currentColor = "";
@@ -387,7 +263,9 @@
       return;
     }
 
-    openSpiderDialog(spiderId);
+    // NEW: open full editor page (no dialog)
+    const back = encodeURIComponent("{{ back_url }}");
+    window.location.href = `/spider/${spiderId}/{{ day }}?back=${back}`;
   }
 
   function toggleLastFed(){
@@ -407,65 +285,7 @@
     }
   }
 
-  function selectBooty(btn, val){
-    const dlg = btn.closest(".day-dialog");
-    const input = dlg.querySelector(".booty-input");
-    if(input) input.value = String(val);
-
-    const all = btn.parentElement.querySelectorAll(".booty-btn");
-    all.forEach(x => x.classList.remove("selected"));
-    btn.classList.add("selected");
-  }
-
-  function navSpider(dir, currentId){
-    const idx = spiderIds.indexOf(currentId);
-    if(idx === -1) return;
-    const nextIdx = idx + dir;
-    if(nextIdx < 0 || nextIdx >= spiderIds.length) return;
-
-    document.getElementById("dlg" + currentId).close();
-    openSpiderDialog(spiderIds[nextIdx]);
-  }
-
-  async function saveName(spiderId){
-    const input = document.getElementById("name" + spiderId);
-    const name = (input.value || "").trim();
-
-    const res = await fetch("/set_spider_name", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ spider_id: spiderId, name })
-    });
-
-    if(!res.ok){
-      alert("Name save failed");
-      return;
-    }
-
-    const data = await res.json();
-    const newName = data.name || "";
-
-    const card = document.querySelector(`.spider-card[data-spider-id="${spiderId}"]`);
-    if(card){
-      card.dataset.spiderName = newName;
-      const centerName = card.querySelector(".card-center-name");
-      if(centerName) centerName.textContent = newName ? newName : " ";
-    }
-
-    const number = card ? card.dataset.spiderNumber : "";
-    const title = document.getElementById("dlgTitle" + spiderId);
-    if(title){
-      title.textContent = newName ? `Spider #${number} — ${newName}` : `Spider #${number}`;
-    }
-
-    const hint = document.getElementById("nameHint" + spiderId);
-    if(hint){
-      hint.style.display = "block";
-      setTimeout(() => { hint.style.display = "none"; }, 900);
-    }
-  }
-
-  // --- Bulk apply ---
+  // --- Bulk apply (unchanged) ---
   let bulkBooty = 3;
 
   function openBulk(){
@@ -473,7 +293,6 @@
       alert("Select at least 1 spider.");
       return;
     }
-    lockScroll();
     document.getElementById("bulkDlg").showModal();
   }
 
@@ -518,56 +337,12 @@
     location.reload();
   }
 
-  // ---- FULLSCREEN "TINDER" SWIPE ----
-  function openSpiderDialog(spiderId){
-    const dlg = document.getElementById("dlg" + spiderId);
-    if(!dlg) return;
-
-    lockScroll();
-    dlg.showModal();
-
-    // attach swipe handler once per dialog
-    if(dlg.dataset.swipeInit === "1") return;
-    dlg.dataset.swipeInit = "1";
-
-    let startX = 0, startY = 0, tracking = false;
-
-    dlg.addEventListener("touchstart", (e) => {
-      if(!e.touches || e.touches.length !== 1) return;
-      // don’t start swipe if user touches inside inputs/textareas
-      const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : "";
-      if(tag === "input" || tag === "textarea" || tag === "button" || tag === "label") return;
-
-      tracking = true;
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-    }, {passive:true});
-
-    dlg.addEventListener("touchend", (e) => {
-      if(!tracking) return;
-      tracking = false;
-
-      const touch = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : null;
-      if(!touch) return;
-
-      const dx = touch.clientX - startX;
-      const dy = touch.clientY - startY;
-
-      // horizontal swipe threshold
-      if(Math.abs(dx) < 60) return;
-      if(Math.abs(dy) > 80) return;
-
-      if(dx < 0) navSpider(1, spiderId);   // swipe left -> next
-      else navSpider(-1, spiderId);        // swipe right -> prev
-    }, {passive:true});
-  }
-
   // ---- OPTIONAL: swipe day navigation (page-level) ----
   (function(){
     let sx=0, sy=0, active=false;
     document.addEventListener("touchstart", (e)=>{
       if(!e.touches || e.touches.length!==1) return;
-      // ignore if a dialog is open
+      // ignore if a dialog is open (bulk)
       if(document.querySelector("dialog[open]")) return;
       active=true;
       sx=e.touches[0].clientX; sy=e.touches[0].clientY;

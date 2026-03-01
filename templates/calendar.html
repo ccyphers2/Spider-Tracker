@@ -25,156 +25,51 @@
         {% set dstr = d.isoformat() %}
         {% set in_month = (d.month == month) %}
         {% set has_data = (dstr in has_data_days) %}
-        <a class="cal-day
+
+        <button type="button"
+                class="cal-day-btn cal-day
                   {% if not in_month %}muted{% endif %}
                   {% if dstr == today.isoformat() %}today{% endif %}
                   {% if has_data %}has-data{% endif %}"
-           href="{{ url_for('batch_view_day', batch_id=batch_id, day=dstr) }}"
-           data-day="{{ dstr }}">
+                data-day="{{ dstr }}"
+                data-open="{{ url_for('batch_view_day', batch_id=batch_id, day=dstr) }}"
+                data-sum="{{ url_for('day_summary_page', batch_id=batch_id, day=dstr, back=url_for('calendar_view', year=year, month=month)) }}">
           <div class="cal-day-num">{{ d.day }}</div>
-
           {% if has_data %}
             <div class="cal-marker" title="Has data">🕷</div>
           {% endif %}
-        </a>
+        </button>
       {% endfor %}
     {% endfor %}
   </div>
 </div>
-
-<!-- Long-press summary dialog -->
-<dialog class="day-dialog" id="sumDlg">
-  <div class="day-dialog-header">
-    <div>
-      <div class="day-dialog-date" id="sumTitle">Day Summary</div>
-      <div class="day-dialog-status" id="sumSub"></div>
-    </div>
-    <button class="day-dialog-close" type="button" onclick="document.getElementById('sumDlg').close()">✕</button>
-  </div>
-
-  <div class="day-dialog-body">
-    <div class="sum-block">
-      <div class="label">Fed</div>
-      <div class="sum-line" id="sumFed">—</div>
-    </div>
-
-    <div class="sum-block">
-      <div class="label">Ate</div>
-      <div class="sum-line" id="sumAte">—</div>
-    </div>
-
-    <div class="sum-block">
-      <div class="label">Watered</div>
-      <div class="sum-line" id="sumWatered">—</div>
-    </div>
-
-    <div class="sum-block">
-      <div class="label">Molting</div>
-      <div class="sum-line" id="sumMolting">—</div>
-    </div>
-
-    <div class="sum-block">
-      <div class="label">Abdomen size</div>
-      <div class="sum-booty" id="sumBooty"></div>
-      <div class="hint">Grouped by size (1–5)</div>
-    </div>
-  </div>
-
-  <div class="day-dialog-actions">
-    <button class="btn-outline" type="button" onclick="document.getElementById('sumDlg').close()">Close</button>
-  </div>
-</dialog>
 
 <script>
 (function(){
   const batchId = {{ batch_id or 0 }};
   if(!batchId) return;
 
-  // ---------------- SCROLL LOCK (iOS BACKGROUND SCROLL FIX) ----------------
-  let __scrollY = 0;
-
-  function lockScroll(){
-    if(document.body.classList.contains("scroll-locked")) return;
-    __scrollY = window.scrollY || document.documentElement.scrollTop || 0;
-    document.body.style.top = `-${__scrollY}px`;
-    document.body.classList.add("scroll-locked");
-  }
-
-  function unlockScroll(){
-    if(!document.body.classList.contains("scroll-locked")) return;
-    document.body.classList.remove("scroll-locked");
-    document.body.style.top = "";
-    window.scrollTo(0, __scrollY);
-  }
-
-  const sumDlg = document.getElementById("sumDlg");
-  if(sumDlg){
-    sumDlg.addEventListener("close", ()=>{
-      if(!document.querySelector("dialog[open]")) unlockScroll();
-    });
-  }
-
   let holdTimer = null;
   let holding = false;
 
-  function fmtList(arr){
-    if(!arr || arr.length === 0) return "—";
-    return arr.join(", ");
+  // kill iOS callout/selection behavior as much as possible
+  document.querySelectorAll(".cal-day-btn").forEach(btn => {
+    btn.addEventListener("contextmenu", (e)=> e.preventDefault());
+  });
+
+  function go(url){
+    window.location.href = url;
   }
 
-  function setText(id, txt){
-    const el = document.getElementById(id);
-    if(el) el.textContent = txt;
-  }
+  document.querySelectorAll(".cal-day-btn[data-day]").forEach(btn=>{
+    const openUrl = btn.dataset.open;
+    const sumUrl  = btn.dataset.sum;
 
-  function renderBooty(bootyObj){
-    const box = document.getElementById("sumBooty");
-    if(!box) return;
-    box.innerHTML = "";
-
-    const keys = ["1","2","3","4","5"];
-    keys.forEach(k=>{
-      const row = document.createElement("div");
-      row.className = "sum-booty-row";
-      row.innerHTML = `<div class="sum-booty-k">Size ${k}</div><div class="sum-booty-v">${fmtList(bootyObj[k] || [])}</div>`;
-      box.appendChild(row);
-    });
-  }
-
-  async function openSummary(dayStr){
-    const res = await fetch(`/day_summary/${batchId}/${dayStr}`);
-    if(!res.ok){
-      alert("Summary failed");
-      return;
-    }
-    const data = await res.json();
-    if(!data.ok) return;
-
-    setText("sumTitle", "Day Summary");
-    setText("sumSub", data.pretty_day || dayStr);
-
-    setText("sumFed", fmtList(data.fed));
-    setText("sumAte", fmtList(data.ate));
-    setText("sumWatered", fmtList(data.watered));
-    setText("sumMolting", fmtList(data.molting));
-    renderBooty(data.booty || {});
-
-    lockScroll();
-    document.getElementById("sumDlg").showModal();
-  }
-
-  // long-press handling on calendar days
-  document.querySelectorAll(".cal-day[data-day]").forEach(a=>{
-    const dayStr = a.dataset.day;
-
-    // IMPORTANT: prevent iOS URL preview / context menu
-    a.addEventListener("contextmenu", (e)=>{ e.preventDefault(); });
-
-    const startHold = ()=>{
+    const startHold = (e)=>{
       holding = false;
       holdTimer = setTimeout(()=>{
         holding = true;
-        openSummary(dayStr);
+        go(sumUrl);
       }, 450);
     };
 
@@ -183,21 +78,28 @@
       holdTimer = null;
     };
 
-    a.addEventListener("touchstart", startHold, {passive:true});
-    a.addEventListener("touchend", (e)=>{
+    // Tap -> open day
+    btn.addEventListener("click", ()=>{
+      if(holding) return;
+      go(openUrl);
+    });
+
+    // Long press -> summary page
+    btn.addEventListener("touchstart", startHold, {passive:true});
+    btn.addEventListener("touchend", (e)=>{
       cancelHold();
       if(holding){
         e.preventDefault();
         e.stopPropagation();
       }
     }, {passive:false});
-    a.addEventListener("touchmove", cancelHold, {passive:true});
-    a.addEventListener("touchcancel", cancelHold, {passive:true});
+    btn.addEventListener("touchmove", cancelHold, {passive:true});
+    btn.addEventListener("touchcancel", cancelHold, {passive:true});
 
-    // desktop
-    a.addEventListener("mousedown", startHold);
-    a.addEventListener("mouseup", cancelHold);
-    a.addEventListener("mouseleave", cancelHold);
+    // Desktop hold
+    btn.addEventListener("mousedown", startHold);
+    btn.addEventListener("mouseup", cancelHold);
+    btn.addEventListener("mouseleave", cancelHold);
   });
 })();
 </script>
