@@ -264,6 +264,12 @@ body{
 .select-left{ display:flex; flex-direction:column; }
 .select-actions{ display:flex; gap:10px; }
 
+/* ---------------- DIALOGS (CRITICAL FIXES) ---------------- */
+
+/* IMPORTANT: make sure dialogs are NOT visible unless open */
+dialog{ display:none; }
+dialog[open]{ display:block; }
+
 /* Dialogs */
 .day-dialog{
   width: min(560px, 92vw);
@@ -274,7 +280,7 @@ body{
   color: var(--text);
   box-shadow: 0 20px 60px rgba(0,0,0,.35);
 
-  /* KEY FIX: prevent dialog from being taller than the screen */
+  /* prevent dialog taller than screen */
   max-height: calc(100dvh - 24px);
   overflow: hidden;
 }
@@ -319,7 +325,7 @@ body{
   touch-action: manipulation;
 }
 
-/* KEY FIX: scroll inside dialog instead of fighting the page */
+/* scroll inside dialog */
 .day-dialog-body{
   padding: 14px 16px;
   overflow: auto;
@@ -334,14 +340,16 @@ body{
   flex: 0 0 auto;
 }
 
-/* Fullscreen editor */
+/* Fullscreen editor
+   KEY FIX: only set flex when OPEN, otherwise it forces it visible */
 .day-dialog-full{
   width: 100vw;
   max-width: 100vw;
   height: 100dvh;
   max-height: 100dvh;
   border-radius: 0;
-
+}
+.day-dialog-full[open]{
   display:flex;
   flex-direction: column;
 }
