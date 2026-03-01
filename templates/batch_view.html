@@ -258,6 +258,30 @@
 </dialog>
 
 <script>
+  // ---------------- SCROLL LOCK (iOS BACKGROUND SCROLL FIX) ----------------
+  let __scrollY = 0;
+
+  function lockScroll(){
+    if(document.body.classList.contains("scroll-locked")) return;
+    __scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.top = `-${__scrollY}px`;
+    document.body.classList.add("scroll-locked");
+  }
+
+  function unlockScroll(){
+    if(!document.body.classList.contains("scroll-locked")) return;
+    document.body.classList.remove("scroll-locked");
+    document.body.style.top = "";
+    window.scrollTo(0, __scrollY);
+  }
+
+  // If ANY dialog closes, unlock (covers X button, ESC, programmatic close)
+  document.querySelectorAll("dialog").forEach(d=>{
+    d.addEventListener("close", ()=>{
+      if(!document.querySelector("dialog[open]")) unlockScroll();
+    });
+  });
+
   // --- Highlight mode ---
   let highlightMode = false;
   let currentColor = "";
@@ -449,6 +473,7 @@
       alert("Select at least 1 spider.");
       return;
     }
+    lockScroll();
     document.getElementById("bulkDlg").showModal();
   }
 
@@ -497,6 +522,8 @@
   function openSpiderDialog(spiderId){
     const dlg = document.getElementById("dlg" + spiderId);
     if(!dlg) return;
+
+    lockScroll();
     dlg.showModal();
 
     // attach swipe handler once per dialog

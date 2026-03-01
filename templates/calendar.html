@@ -90,6 +90,30 @@
   const batchId = {{ batch_id or 0 }};
   if(!batchId) return;
 
+  // ---------------- SCROLL LOCK (iOS BACKGROUND SCROLL FIX) ----------------
+  let __scrollY = 0;
+
+  function lockScroll(){
+    if(document.body.classList.contains("scroll-locked")) return;
+    __scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+    document.body.style.top = `-${__scrollY}px`;
+    document.body.classList.add("scroll-locked");
+  }
+
+  function unlockScroll(){
+    if(!document.body.classList.contains("scroll-locked")) return;
+    document.body.classList.remove("scroll-locked");
+    document.body.style.top = "";
+    window.scrollTo(0, __scrollY);
+  }
+
+  const sumDlg = document.getElementById("sumDlg");
+  if(sumDlg){
+    sumDlg.addEventListener("close", ()=>{
+      if(!document.querySelector("dialog[open]")) unlockScroll();
+    });
+  }
+
   let holdTimer = null;
   let holding = false;
 
@@ -135,6 +159,7 @@
     setText("sumMolting", fmtList(data.molting));
     renderBooty(data.booty || {});
 
+    lockScroll();
     document.getElementById("sumDlg").showModal();
   }
 
@@ -142,9 +167,11 @@
   document.querySelectorAll(".cal-day[data-day]").forEach(a=>{
     const dayStr = a.dataset.day;
 
-    const startHold = (e)=>{
+    // IMPORTANT: prevent iOS URL preview / context menu
+    a.addEventListener("contextmenu", (e)=>{ e.preventDefault(); });
+
+    const startHold = ()=>{
       holding = false;
-      // start a timer; if it completes, open summary
       holdTimer = setTimeout(()=>{
         holding = true;
         openSummary(dayStr);
@@ -159,7 +186,6 @@
     a.addEventListener("touchstart", startHold, {passive:true});
     a.addEventListener("touchend", (e)=>{
       cancelHold();
-      // If we long-pressed, prevent navigation on release
       if(holding){
         e.preventDefault();
         e.stopPropagation();
@@ -168,7 +194,7 @@
     a.addEventListener("touchmove", cancelHold, {passive:true});
     a.addEventListener("touchcancel", cancelHold, {passive:true});
 
-    // also allow mouse hold (desktop)
+    // desktop
     a.addEventListener("mousedown", startHold);
     a.addEventListener("mouseup", cancelHold);
     a.addEventListener("mouseleave", cancelHold);

@@ -33,6 +33,10 @@
 
 *{ box-sizing:border-box; }
 
+html, body{
+  height: 100%;
+}
+
 body{
   background:var(--bg);
   color:var(--text);
@@ -41,6 +45,15 @@ body{
 
   /* Prevent weird iOS bounce/ghost scrolling issues */
   overscroll-behavior-y: none;
+}
+
+/* ---- CRITICAL: lock background scroll when a dialog is open ---- */
+body.scroll-locked{
+  position: fixed;
+  overflow: hidden;
+  width: 100%;
+  left: 0;
+  right: 0;
 }
 
 /* Page padding accounts for the fixed bottom nav + iPhone safe area */
@@ -453,6 +466,11 @@ dialog[open]{ display:block; }
   padding: 8px;
   text-decoration:none;
   position: relative;
+
+  /* IMPORTANT: prevent iOS link preview / callout on long-press */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .cal-day:hover{
   background: var(--tileBgSoft);
